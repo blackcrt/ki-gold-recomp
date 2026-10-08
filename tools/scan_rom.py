@@ -9,8 +9,8 @@ Answers three early questions without disassembling anything:
   3. Are there plain gzip streams?
 
 Usage:
-  python tools/scan_rom.py                 # print a summary
-  python tools/scan_rom.py --out FILE      # also write the full report to FILE
+  python3 tools/scan_rom.py                 # print a summary
+  python3 tools/scan_rom.py --out FILE      # also write the full report to FILE
 
 The full report goes in build/ by default (git-ignored), because it quotes
 strings from the ROM. Summarize findings in NOTES.md in your own words.

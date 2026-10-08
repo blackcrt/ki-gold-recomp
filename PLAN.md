@@ -38,7 +38,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 
 | Phase | Work | Gate to move on |
 | --- | --- | --- |
-| 0: Setup | Git, Python, Visual Studio Build Tools, Claude Code, Ollama on Windows; clone the repo; ROM checked and hash recorded | Guard blocks a test ROM; `romcheck` passes |
+| 0: Setup | Set up WSL (Ubuntu, Claude Code, git); add Visual Studio Build Tools and Ollama on Windows; clone the repo to `C:\src`; ROM checked and hash recorded | Guard blocks a test ROM; `romcheck` passes |
 | 1: Recon | Scan for microcode and compression; splat split; identify libultra by fingerprinting against GoldenEye; generate the first symbol file | **Go/no-go:** microcode is supported by RT64 (or a plan exists for it) and the symbol file covers the whole game |
 | 2: First boot | Build N64Recomp and RSPRecomp; write the recomp config; set up the post-regen cleanup pipeline; build the port; chase crashes one at a time | Boots past the Rare logo to the title screen |
 | 3: Playable | Input, audio, saves, rumble; test every fighter, stage, and mode | Full arcade run with no crashes; versus mode works |
@@ -51,13 +51,13 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 - [ ] Follow `docs/SETUP.md` on the Windows PC
 - [x] Create the private GitHub repo (done 2026-10-08)
 - [ ] Guard hook on, and it blocks a test commit of the ROM
-- [ ] `python tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
+- [ ] `python3 tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
 - [ ] Ollama and Qwen2.5-Coder 14B installed and sanity checked
 
 ### Phase 1 checklist
 
-- [ ] `python tools/scan_rom.py`: identify graphics and audio microcode
-- [ ] `python tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
+- [ ] `python3 tools/scan_rom.py`: identify graphics and audio microcode
+- [ ] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
 - [ ] Generate a splat config in `disasm/` and get a clean split
 - [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified
 - [ ] Generate the symbol file N64Recomp reads (`syms/`)
@@ -88,7 +88,8 @@ Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https:/
 | splat (+ spimdisasm, crunch64) | Map the ROM, generate symbols | 1 |
 | N64Recomp, RSPRecomp | Translate game code and audio microcode to C | 2 |
 | N64ModernRuntime, RT64, RecompFrontend | Runtime, renderer, launcher and menus | 2 |
-| Visual Studio Build Tools 2022 (clang-cl, CMake, Ninja) | Build the Windows port | 2 |
+| Ubuntu in WSL | Home base: git, Python tools, recon, recompiler | All |
+| Visual Studio Build Tools 2022 (clang-cl, CMake, Ninja) | Build the Windows port (started from WSL via PowerShell) | 2 |
 | MIPS-capable clang + make | Build patches | 4 |
 | Claude Code | Main agent | All |
 | Ollama + Qwen2.5-Coder 14B | Local bulk worker | All |
@@ -96,6 +97,7 @@ Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https:/
 
 ## Working rhythm
 
+- **Coach relay:** a claude.ai coach chat plans each step; BlackCRT tells Claude Code what to do and pastes results back. Start a fresh coach chat per phase; `NOTES.md` is the handoff.
 - Short, frequent sessions. Each one ends with a commit.
 - Track progress by milestones: how far the build gets (boots, menus, a match, each fighter and stage, each feature).
 - When crash-chasing gets grindy, switch to a feature, tooling, or docs.
@@ -133,4 +135,6 @@ Other rules: dump your own cartridge before going public, free forever, labeled 
 | 2026-10-08 | Plan lives in this repo (CLAUDE.md, PLAN.md, NOTES.md), not in outside docs |
 | 2026-10-08 | Source-only releases; no prebuilt executables |
 | 2026-10-08 | **Final direction: recomp with modern features** (high res, widescreen, high refresh rate, QoL). Replaces the earlier decomp-first plan; partial decomp only where a feature needs it |
-| 2026-10-08 | Work natively on Windows (the port build requires it); WSL, the Makefile, and the IDO compiler dropped |
+| 2026-10-08 | Dropped the Makefile and IDO compiler (decomp-only tools) |
+| 2026-10-08 | Hybrid setup: Ubuntu in WSL as home base, Windows build tools only for the game `.exe`, repo on `C:\src`. No Docker |
+| 2026-10-08 | Coach relay workflow: claude.ai chat coaches, BlackCRT relays to and from Claude Code |

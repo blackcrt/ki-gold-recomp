@@ -1,0 +1,14 @@
+# Keep line endings consistent between Ubuntu (WSL) and Windows tools.
+# Text files are stored and checked out with LF, so git never reports
+# "every line changed" just because a different side touched the file.
+* text=auto eol=lf
+
+# Windows-only scripts keep Windows line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never treat these as text.
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary

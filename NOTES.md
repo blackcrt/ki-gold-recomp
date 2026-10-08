@@ -2,6 +2,17 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Hybrid setup and coach workflow
+
+**Done**
+- Switched to a **hybrid setup**: Ubuntu in WSL is home base (Claude Code, git, Python tools, recompiler); Windows Build Tools only build the game `.exe`, started from WSL via PowerShell. Repo lives at `C:\src\ki-gold-recomp` (`/mnt/c/src/ki-gold-recomp`). No Docker.
+- Adopted the **coach relay** workflow: a claude.ai coach chat plans each step, BlackCRT relays to Claude Code and pastes results back. `CLAUDE.md` now tells Claude Code to do only what's asked, explain commands, and end each task with a pasteable summary.
+- Added `.gitattributes` (LF line endings) and `core.fileMode false` in the setup guide, so git on the C: drive doesn't report phantom changes.
+- Rewrote `docs/SETUP.md` for the hybrid setup; it now starts by checking what's already installed.
+
+**Next**
+- Next: open a new coach chat in the claude.ai Project and say "Let's start Phase 0."
+
 ## 2026-10-08: Final direction is the recomp
 
 **Done**

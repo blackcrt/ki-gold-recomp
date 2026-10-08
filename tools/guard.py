@@ -6,8 +6,8 @@ ROM files, extracted or generated output, binary files, large files,
 and any file that looks like or matches the N64 ROM.
 
 Usage:
-  python tools/guard.py --staged   # check what's about to be committed (pre-commit hook)
-  python tools/guard.py --all      # check every tracked file (GitHub Actions)
+  python3 tools/guard.py --staged   # check what's about to be committed (pre-commit hook)
+  python3 tools/guard.py --all      # check every tracked file (GitHub Actions)
 
 Exit code 0 means clean, 1 means something was blocked.
 """

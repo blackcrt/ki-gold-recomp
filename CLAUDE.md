@@ -8,15 +8,32 @@ A solo, AI-assisted **static recompilation** of Killer Instinct Gold (N64, Rare,
 
 - Owner: BlackCRT. sets goals, makes decisions, and playtests. Claude does the engineering.
 - Spend usage on the hard parts; push bulk work to the local model.
-- Platform: native Windows, PowerShell. The port build needs Visual Studio Build Tools (clang-cl, CMake, Ninja).
 - Current phase: see the status line at the top of `PLAN.md`.
 
-## How to work with BlackCRT
+## Platform (hybrid)
 
-- Explain every command before it is run: what it does and why. Give PowerShell commands, not bash, unless there's a reason.
-- Keep answers short and simple. Lead with what to do next.
+- **Home base is Ubuntu in WSL.** You (Claude Code) run in the Ubuntu terminal. Use bash and Linux tools for git, Python, recon, splat, and N64Recomp.
+- **The repo is on the C: drive:** `/mnt/c/src/ki-gold-recomp` from Ubuntu, `C:\src\ki-gold-recomp` from Windows. Never move it into the Linux home folder; the Windows build needs to reach it.
+- **The game build is Windows-only** (Phase 2 onward). Visual Studio Build Tools 2022 (clang-cl, CMake, Ninja) build the `.exe`. Start Windows builds from Ubuntu through `powershell.exe` calling a script in the repo, using Windows paths (`C:\src\...`).
+- BlackCRT plays and tests the `.exe` on Windows.
+- No Docker.
+
+## How BlackCRT works with you (coach relay)
+
+BlackCRT runs a **coach chat** in claude.ai alongside you. The coach plans each step and says what to ask you; BlackCRT relays your results back to the coach. So:
+
+- **Do what was asked, then stop.** Don't jump ahead to extra tasks or the next phase. If you see a better next step, suggest it instead of doing it.
+- **End every task with a short summary that can be pasted back:** what you did, commands you ran and their results, files changed, anything that needs a decision. Plain language, no walls of output.
+- **Explain every command before running it:** what it does and why, so nothing gets committed that isn't understood.
+- Keep answers short and simple. Lead with what happened and what's next.
 - Never use em dashes in anything you write: chat, docs, code comments, commit messages.
 - Ask before anything that can't be undone (deleting files, rewriting git history, force pushes).
+
+
+## Usage habits
+
+- Suggest `/clear` between unrelated tasks; long contexts burn allowance fast.
+- Don't read large files or generated code (for example `RecompiledFuncs/`) unless the task needs them; search first.
 
 ## Legal rules (non-negotiable)
 
@@ -45,11 +62,12 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | --- | --- |
 | `PLAN.md` | Goal, modern features list, phases, gates, decisions |
 | `NOTES.md` | Dated session log |
-| `docs/SETUP.md` | Phase 0 setup guide for the Windows PC (Windows) |
+| `docs/SETUP.md` | Phase 0 setup guide for the Windows PC (WSL + Windows build tools) |
 | `docs/WM2K.md` | How the WrestleMania 2000 recomp is built; our template |
 | `docs/GOLDENEYE.md` | GoldenEye decomp notes: libultra identification and Rare compression |
 | `docs/RESEARCH.md` | Pre-recon findings and sources |
 | `tools/guard.py` | Legal guard: blocks ROMs, generated code, binaries, big files |
 | `tools/romcheck.py` | Checks the ROM, converts byte order |
 | `tools/scan_rom.py` | Recon scan for microcode and Rare compression |
-| `requirements.txt` | Python tools for recon (splat), installed into `disasm\.venv` |
+| `requirements.txt` | Python tools for recon (splat), installed into `disasm/.venv` |
+| `.gitattributes` | Keeps line endings consistent between Ubuntu and Windows |
