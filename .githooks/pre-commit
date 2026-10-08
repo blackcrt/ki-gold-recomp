@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the legal guard on everything you're about to commit.
+# Installed with: git config core.hooksPath .githooks
+exec python3 tools/guard.py --staged

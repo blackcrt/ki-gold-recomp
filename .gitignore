@@ -1,0 +1,38 @@
+# ---- ROMs (never commit, any byte order or extension) ----
+*.z64
+*.n64
+*.v64
+*.rom
+*.ndd
+baserom*
+
+# ---- Generated and extracted output ----
+build/
+asm/
+assets/
+bin/
+expected/
+nonmatchings/
+*.o
+*.elf
+*.map
+*.bin
+
+# ---- Tooling caches ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.splat_cache
+permuter_out/
+nonmatching_scratch/
+
+# ---- Editors and OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- Claude Code local settings (keep project CLAUDE.md tracked) ----
+.claude/settings.local.json
