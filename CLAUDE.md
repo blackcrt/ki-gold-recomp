@@ -27,6 +27,10 @@ Every commit must contain only our own original work.
 - The guard (`tools/guard.py`) runs on every commit and in GitHub Actions. Never bypass it with `--no-verify`. If it blocks something, the fix is to not commit that file.
 - The ROM file is `baserom.us.z64` in the repo root, git-ignored. Never copy it anywhere else or print its bytes.
 
+## Decomp rules
+
+Follow the six ground rules in `PLAN.md` (AI workflow section). The short version: only the byte-identical build proves a match, test tools against a known answer before trusting them, and never invent names without evidence.
+
 ## Session habits
 
 1. At the start: read the latest `NOTES.md` entry and the current phase in `PLAN.md`.

@@ -26,11 +26,12 @@ See `docs/RESEARCH.md` for details and sources.
 | Phase | Work | Gate to move on |
 | --- | --- | --- |
 | 0: Setup | WSL2, toolchain, Claude Code, Ollama, private repo, guard installed, ROM hash recorded | Guard blocks a test ROM; tools run |
-| 1: Recon | Split the ROM with splat; find compression; count functions; identify compiler, libultra, and microcode | **Decomp checkpoint:** compiler confirmed and one function matches |
+| 1: Recon | Split the ROM with splat; find compression; count functions; identify compiler, libultra, and microcode | **Decomp checkpoint:** 3 to 5 probe functions match under exactly one compiler setup |
 | 2: Shiftable build | Rebuild the whole ROM from split assembly, data, and assets | SHA1 matches on every build |
-| 3: Free wins | Fingerprint libultra, Rare libultra changes, and audio code against GoldenEye and Banjo-Kazooie | All library code identified and matched |
-| 4: Matching grind | AI matching loop over game code, easiest functions first | 100% of game code in C, SHA1 still matches |
-| 5: Optional | Recomp playable build, native port, enhancements | BlackCRT's call |
+| 3: Free wins and instruments | Fingerprint libultra, Rare libultra changes, and audio code against GoldenEye and Banjo-Kazooie. Build the tools for the grind: per-function diff, permuter harness, duplicate finder | Library code matched; every tool proven against a known answer |
+| 4: Matching grind | AI matching loop over game code, easiest functions first; match duplicates once and propagate | 100% of game code in C, SHA1 still matches |
+| 5: Readability and publish check | Clean up names, types, and casts with the build still byte-identical; a fresh clone rebuilds from BlackCRT's own cartridge dump using only the README | Both pass |
+| 6: Optional | Recomp playable build, native port, enhancements | BlackCRT's call |
 
 ### Phase 0 checklist (when BlackCRT says go)
 
@@ -47,7 +48,7 @@ See `docs/RESEARCH.md` for details and sources.
 - [ ] `make scan`: confirm whether Rare's 1172 compression is used, and where
 - [ ] `make config` then `make split`: first clean split
 - [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`)
-- [ ] Confirm the compiler (IDO 5.3 is the working guess) by matching one small function
+- [ ] Pin the compiler: pick 3 to 5 small, varied functions and confirm they all match under exactly one setup (IDO 5.3 at `-O2 -mips2` is the working guess)
 - [ ] Count functions and estimate the size of the job
 - [ ] Decomp checkpoint: write findings to `NOTES.md` and confirm the plan
 
@@ -58,6 +59,17 @@ See `docs/RESEARCH.md` for details and sources.
 - **Local model (intern):** Ollama + Qwen2.5-Coder 14B on a local GPU. Triage difficulty, suggest names, draft comments.
 - **BlackCRT (director):** picks batches, reviews merges, tests builds in an emulator, makes naming and structure calls.
 - **Rule:** nothing merges unless the full ROM still rebuilds with a matching SHA1 and the guard passes.
+
+### Ground rules (lessons from finished decomps)
+
+Adapted from the [Brave Fencer Musashi decomp's lessons](https://github.com/Druthulu/BFM-decomp/wiki/Start-a-new-decomp-project):
+
+1. **The byte-identical build is the only proof.** An agent saying "it matches" doesn't count; the build does.
+2. **Build the instruments before the grind.** Diff, permuter, and duplicate tooling are Phase 3 work, not something to bolt on mid-campaign.
+3. **Test every tool against a known answer first.** A 0% result can mean the tool is broken, not the code.
+4. **Match duplicates once, then propagate.** Each copy still has to pass the build on its own.
+5. **Names need evidence.** No guessed names; record the reason (a string, a libultra signature, a GoldenEye match) in a comment.
+6. **Near-misses are not matches.** Code that only matches with hacks (register pins, fake temporaries) gets flagged, and cleaned up in Phase 5.
 
 ## Tools
 
@@ -114,3 +126,4 @@ Other rules: dump your own cartridge before going public, free forever, labeled 
 | 2026-10-08 | Decomp is the main goal; recomp is an optional side quest |
 | 2026-10-08 | Plan lives in this repo (CLAUDE.md, PLAN.md, NOTES.md), not in outside docs |
 | 2026-10-08 | Source-only releases; no prebuilt executables |
+| 2026-10-08 | Adopted six ground rules from the BFM decomp; added Phase 5 (readability and publish check) |
