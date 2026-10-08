@@ -1,4 +1,11 @@
 #!/bin/sh
 # Runs the legal guard on everything you're about to commit.
 # Installed with: git config core.hooksPath .githooks
-exec python3 tools/guard.py --staged
+# Works with Git for Windows (python or py) and Linux (python3).
+for py in python3 python py; do
+    if "$py" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
+        exec "$py" tools/guard.py --staged
+    fi
+done
+echo "guard: Python 3.10 or newer not found. Install Python, then commit again." >&2
+exit 1

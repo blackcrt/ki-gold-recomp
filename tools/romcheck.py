@@ -2,8 +2,8 @@
 """Check that baserom.us.z64 is the right ROM, in the right byte order.
 
 Usage:
-  python3 tools/romcheck.py                      # check baserom.us.z64
-  python3 tools/romcheck.py --convert FILE       # convert a .v64/.n64 ROM into baserom.us.z64
+  python tools/romcheck.py                      # check baserom.us.z64
+  python tools/romcheck.py --convert FILE       # convert a .v64/.n64 ROM into baserom.us.z64
 
 Prints the ROM header (name, region, revision, entry point, libultra
 version) and compares the SHA1 with tools/rom.sha1. Never prints ROM bytes.
@@ -60,7 +60,7 @@ def convert(src: Path) -> int:
         print(f"FAIL: {ROM_PATH} already exists. Move or delete it first if you really want to replace it.")
         return 1
     ROM_PATH.write_bytes(to_z64(data, order))
-    print(f"Converted {src} ({order}) to {ROM_PATH} (z64). Now run: python3 tools/romcheck.py")
+    print(f"Converted {src} ({order}) to {ROM_PATH} (z64). Now run: python tools/romcheck.py")
     return 0
 
 
@@ -77,8 +77,9 @@ def check() -> int:
         print("FAIL: this file doesn't start with an N64 ROM header.")
         return 1
     if order != "z64":
-        print(f"FAIL: ROM is in {order} byte order. Fix it with:")
-        print(f"  mv {ROM_PATH} rom_original.{order} && python3 tools/romcheck.py --convert rom_original.{order}")
+        print(f"FAIL: ROM is in {order} byte order. Fix it with these two commands:")
+        print(f"  Move-Item {ROM_PATH} rom_original.{order}")
+        print(f"  python tools/romcheck.py --convert rom_original.{order}")
         return 1
 
     clock, entry, libver = struct.unpack_from(">III", data, 0x04)

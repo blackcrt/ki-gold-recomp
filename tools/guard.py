@@ -6,8 +6,8 @@ ROM files, extracted or generated output, binary files, large files,
 and any file that looks like or matches the N64 ROM.
 
 Usage:
-  python3 tools/guard.py --staged   # check what's about to be committed (pre-commit hook)
-  python3 tools/guard.py --all      # check every tracked file (GitHub Actions)
+  python tools/guard.py --staged   # check what's about to be committed (pre-commit hook)
+  python tools/guard.py --all      # check every tracked file (GitHub Actions)
 
 Exit code 0 means clean, 1 means something was blocked.
 """
@@ -32,7 +32,15 @@ BLOCKED_EXTENSIONS = {
 BLOCKED_PREFIXES = ("baserom",)
 
 # Folders that only ever hold generated or extracted output.
-BLOCKED_DIRS = {"build", "asm", "assets", "bin", "expected", "nonmatchings"}
+BLOCKED_DIRS = {
+    "build", "asm", "assets", "bin", "expected", "nonmatchings",
+    "recompiledfuncs", "recompiledpatches",  # N64Recomp output: translated game code
+}
+
+# Generated files that live next to files we do commit.
+BLOCKED_GLOBS = (
+    "rsp/*.cpp",  # RSPRecomp output: translated audio microcode
+)
 
 # Binary files are only allowed for these image types, inside docs/images/.
 ALLOWED_BINARY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -96,6 +104,8 @@ def check(name: str, data: bytes, rom_sha1: str | None) -> list[str]:
         problems.append("files named 'baserom...' are the ROM and never allowed")
     if BLOCKED_DIRS.intersection(part.lower() for part in path.parts[:-1]):
         problems.append("this folder only holds generated or extracted output")
+    if any(path.match(pattern) for pattern in BLOCKED_GLOBS):
+        problems.append("this is generated code (recompiler output)")
     if len(data) > MAX_BYTES:
         problems.append(f"file is {len(data) // 1024} KB, over the {MAX_BYTES // 1024} KB limit")
     if data[:4] in ROM_MAGIC:
