@@ -93,8 +93,8 @@ Use a short folder path. Deep paths (like OneDrive Documents) cause "Filename to
 ```powershell
 mkdir C:\src
 cd C:\src
-git clone https://github.com/BlackCRT/ki-gold-decomp.git
-cd ki-gold-decomp
+git clone https://github.com/BlackCRT/ki-gold-recomp.git
+cd ki-gold-recomp
 git config core.hooksPath .githooks
 ```
 
@@ -164,7 +164,7 @@ disasm\.venv\Scripts\pip install -r requirements.txt
 ## Part 9: Hand off to Claude Code
 
 ```powershell
-cd C:\src\ki-gold-decomp
+cd C:\src\ki-gold-recomp
 claude
 ```
 
