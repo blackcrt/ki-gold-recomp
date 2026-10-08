@@ -1,108 +1,116 @@
-# KI Gold Decomp: Project Plan
+# KI Gold Recomp: Project Plan
 
 **Status:** Phase 0 not started. Planning only until BlackCRT says go.
 **Last updated:** 2026-10-08
 
 ## Goal
 
-A matching decompilation of Killer Instinct Gold (U) (V1.2): readable C that rebuilds the exact ROM. Built by Claude Code with BlackCRT directing and testing.
+A native Windows PC port of Killer Instinct Gold (U) (V1.2), made by **static recompilation** with N64Recomp, rendered with RT64, and upgraded with **modern features**: high resolution, widescreen, high refresh rate, and quality-of-life fixes. Built by Claude Code with BlackCRT directing and playtesting.
 
 Milestones, each useful on its own:
 
-1. **Shiftable build:** the ROM rebuilds byte-identical from split assembly.
-2. **Matching decomp:** all game code in C, still byte-identical.
-3. **Optional side quests:** an N64Recomp playable build (can start any time after Phase 1), and later a native PC port with widescreen, texture packs, and PC settings.
+1. **First boot:** the recompiled game reaches the title screen on PC.
+2. **Playable:** full matches with working input, audio, saves, and rumble.
+3. **Modernized:** the feature list below, easiest first.
+4. **Optional:** decompile only the systems a feature needs to change deeply.
 
-## Why we think this is doable
+## How it works (one paragraph)
 
-- The [Silent Hill 2 decomp](https://github.com/oohweee/sh2-decomp) reached about 97% matching in roughly a week, written by Claude Code and Codex. It had a big head start (a finished prototype decomp with debug info) and a huge compute budget, so we expect months, not a week.
-- The [GoldenEye 007 decomp](https://github.com/n64decomp/007) is 100% matched as of August 2026. It's a Rare N64 game from the same era, built with IDO 5.3, and it includes a Rare-modified libultra. That's our best reference and fingerprint source.
-- KI Gold is a 12 MB cart. Its code is likely smaller than SH2's (about 5,000 functions). Exact count comes from recon.
+splat maps out the ROM and gives every function an address and a name. N64Recomp reads the ROM plus that symbol list and translates every MIPS function into C. Cleanup scripts fix the cases N64Recomp gets silently wrong. The generated C is compiled together with N64ModernRuntime (replaces the N64's OS), RT64 (renders the N64's graphics commands on a modern GPU), and RecompFrontend (launcher, menus, input) into a Windows `.exe`. Modern features come from RT64 settings and from **patches**: small C replacements for specific game functions. This is the same pipeline as the [WrestleMania 2000 recomp](https://github.com/jessetbh/WWFWrestleMania2000Recomp); see `docs/WM2K.md`.
 
-See `docs/RESEARCH.md` for details and sources.
+## Modern features
+
+| Feature | How | Difficulty |
+| --- | --- | --- |
+| High resolution, anti-aliasing | Built into RT64 | Easy |
+| Modern input: rebinding, keyboard, any controller, rumble | Built into RecompFrontend | Easy |
+| Automatic saves | Built into the runtime | Easy |
+| Settings menu (graphics, audio, controls) | Built into RecompFrontend | Easy |
+| Widescreen 3D view (16:9, ultrawide) | RT64 "Expand" aspect mode | Easy to medium |
+| Widescreen HUD and camera fixes | Patches: anchor health bars and text to screen edges, widen camera bounds | Medium |
+| High-res texture packs | RT64 texture replacement; making the art is separate work | Easy (support), large (art) |
+| Quality of life: skip intro logos, fast boot, pause when the window loses focus | Patches | Medium |
+| **High refresh rate (120Hz, 144Hz and up)** | RT64 frame interpolation plus patches that tag the game's matrices, the approach Zelda64Recomp uses. Game logic stays at its original speed so gameplay timing is unchanged | **Hard.** WM2K hasn't solved this yet for its engine |
+
+Patches need an extra toolchain (a MIPS-capable clang and make); we add it at the start of Phase 4.
 
 ## Phases
 
 | Phase | Work | Gate to move on |
 | --- | --- | --- |
-| 0: Setup | WSL2, toolchain, Claude Code, Ollama, private repo, guard installed, ROM hash recorded | Guard blocks a test ROM; tools run |
-| 1: Recon | Split the ROM with splat; find compression; count functions; identify compiler, libultra, and microcode | **Decomp checkpoint:** 3 to 5 probe functions match under exactly one compiler setup |
-| 2: Shiftable build | Rebuild the whole ROM from split assembly, data, and assets | SHA1 matches on every build |
-| 3: Free wins and instruments | Fingerprint libultra, Rare libultra changes, and audio code against GoldenEye and Banjo-Kazooie. Build the tools for the grind: per-function diff, permuter harness, duplicate finder | Library code matched; every tool proven against a known answer |
-| 4: Matching grind | AI matching loop over game code, easiest functions first; match duplicates once and propagate | 100% of game code in C, SHA1 still matches |
-| 5: Readability and publish check | Clean up names, types, and casts with the build still byte-identical; a fresh clone rebuilds from BlackCRT's own cartridge dump using only the README | Both pass |
-| 6: Optional | Recomp playable build, native port, enhancements | BlackCRT's call |
+| 0: Setup | Git, Python, Visual Studio Build Tools, Claude Code, Ollama on Windows; clone the repo; ROM checked and hash recorded | Guard blocks a test ROM; `romcheck` passes |
+| 1: Recon | Scan for microcode and compression; splat split; identify libultra by fingerprinting against GoldenEye; generate the first symbol file | **Go/no-go:** microcode is supported by RT64 (or a plan exists for it) and the symbol file covers the whole game |
+| 2: First boot | Build N64Recomp and RSPRecomp; write the recomp config; set up the post-regen cleanup pipeline; build the port; chase crashes one at a time | Boots past the Rare logo to the title screen |
+| 3: Playable | Input, audio, saves, rumble; test every fighter, stage, and mode | Full arcade run with no crashes; versus mode works |
+| 4: Modernize | Patches toolchain, then the feature list easiest first; high refresh rate last | Every feature BlackCRT wants is in, or consciously dropped |
+| 5: Polish and publish check | Clean build from a fresh clone using only the README; your own cartridge dump works | Both pass |
+| 6: Optional | Partial decomp of systems a feature needs (for example, the HUD or camera) | BlackCRT's call |
 
 ### Phase 0 checklist (when BlackCRT says go)
 
 - [ ] Follow `docs/SETUP.md` on the Windows PC
-- [ ] Record the ROM's SHA1 in `tools/rom.sha1`
-- [x] Create the private GitHub repo and push this starter kit (done 2026-10-08)
-- [ ] Install the guard hook and confirm it blocks the ROM
-- [ ] Install Ollama and Qwen2.5-Coder 14B and sanity check it
+- [x] Create the private GitHub repo (done 2026-10-08)
+- [ ] Guard hook on, and it blocks a test commit of the ROM
+- [ ] `python tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
+- [ ] Ollama and Qwen2.5-Coder 14B installed and sanity checked
 
 ### Phase 1 checklist
 
-- [ ] `make check` passes (right ROM, z64 order, SHA1 recorded)
-- [ ] `make scan`: identify graphics and audio microcode from the strings it finds
-- [ ] `make scan`: confirm whether Rare's 1172 compression is used, and where
-- [ ] `make config` then `make split`: first clean split
-- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`)
-- [ ] Pin the compiler: pick 3 to 5 small, varied functions and confirm they all match under exactly one setup (IDO 5.3 at `-O2 -mips2` is the working guess)
-- [ ] Count functions and estimate the size of the job
-- [ ] Decomp checkpoint: write findings to `NOTES.md` and confirm the plan
+- [ ] `python tools/scan_rom.py`: identify graphics and audio microcode
+- [ ] `python tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
+- [ ] Generate a splat config in `disasm/` and get a clean split
+- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified
+- [ ] Generate the symbol file N64Recomp reads (`syms/`)
+- [ ] Go/no-go: write findings to `NOTES.md` and confirm the plan
 
 ## AI workflow
 
-- **Claude Code (matcher):** per function, take m2c's first pass, write C, build, diff with objdiff, adjust, repeat. Cap attempts; log near-misses.
-- **decomp-permuter (night shift):** grinds near-misses overnight on the CPU. Costs no Claude usage.
-- **Local model (intern):** Ollama + Qwen2.5-Coder 14B on a local GPU. Triage difficulty, suggest names, draft comments.
-- **BlackCRT (director):** picks batches, reviews merges, tests builds in an emulator, makes naming and structure calls.
-- **Rule:** nothing merges unless the full ROM still rebuilds with a matching SHA1 and the guard passes.
+- **Claude Code (engineer):** runs the build, reads crash logs, traces them to a function, and fixes them with config changes, stubs, cleanup scripts, or patches.
+- **Local model (intern):** Ollama + Qwen2.5-Coder 14B on a local GPU. Suggest function names, summarize unfamiliar functions, draft notes.
+- **BlackCRT (director and playtester):** plays builds, describes what's broken, approves changes, decides what's next.
+- **Rule:** nothing merges unless the game still boots and the guard passes.
 
-### Ground rules (lessons from finished decomps)
+### Ground rules
 
-Adapted from the [Brave Fencer Musashi decomp's lessons](https://github.com/Druthulu/BFM-decomp/wiki/Start-a-new-decomp-project):
+Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https://github.com/Druthulu/BFM-decomp/wiki/Start-a-new-decomp-project), and [this write-up on agent-driven N64 work](https://blog.chrislewis.au/using-coding-agents-to-decompile-nintendo-64-games/)):
 
-1. **The byte-identical build is the only proof.** An agent saying "it matches" doesn't count; the build does.
-2. **Build the instruments before the grind.** Diff, permuter, and duplicate tooling are Phase 3 work, not something to bolt on mid-campaign.
-3. **Test every tool against a known answer first.** A 0% result can mean the tool is broken, not the code.
-4. **Match duplicates once, then propagate.** Each copy still has to pass the build on its own.
-5. **Names need evidence.** No guessed names; record the reason (a string, a libultra signature, a GoldenEye match) in a comment.
-6. **Near-misses are not matches.** Code that only matches with hacks (register pins, fake temporaries) gets flagged, and cleaned up in Phase 5.
+1. **The running game is the proof.** A fix counts when the build boots and plays past the problem, not when an agent says so.
+2. **Run the full cleanup pipeline after every regeneration.** WM2K found that N64Recomp miscompiles some code silently; a skipped step can boot fine and corrupt itself later.
+3. **Never hand-edit generated code.** Fix things in the config, a cleanup script, or a patch, so the fix survives regeneration.
+4. **Test every tool against a known answer first.** A tool that finds nothing may be broken.
+5. **Names need evidence.** Record the reason (a string, a libultra fingerprint, a GoldenEye match) in a comment.
+6. **One change at a time.** Small, tested steps; keep previous attempts instead of overwriting them.
 
 ## Tools
 
-| Tool | Job |
-| --- | --- |
-| splat / spimdisasm | Split the ROM into code, data, assets |
-| IDO 5.3 (via ido-static-recomp) | Original compiler, confirm in Phase 1 |
-| binutils-mips-linux-gnu | Assemble and link |
-| m2c | First-pass C from assembly |
-| objdiff | Compare compiled functions with the target |
-| decomp-permuter | Brute-force near-matches |
-| decomp.me | Web scratchpad for stubborn functions |
-| Claude Code | Main agent |
-| Ollama + Qwen2.5-Coder 14B | Local bulk worker |
-| ares or Mupen64Plus | Emulator for testing builds |
+| Tool | Job | Phase |
+| --- | --- | --- |
+| splat (+ spimdisasm, crunch64) | Map the ROM, generate symbols | 1 |
+| N64Recomp, RSPRecomp | Translate game code and audio microcode to C | 2 |
+| N64ModernRuntime, RT64, RecompFrontend | Runtime, renderer, launcher and menus | 2 |
+| Visual Studio Build Tools 2022 (clang-cl, CMake, Ninja) | Build the Windows port | 2 |
+| MIPS-capable clang + make | Build patches | 4 |
+| Claude Code | Main agent | All |
+| Ollama + Qwen2.5-Coder 14B | Local bulk worker | All |
+| ares or Mupen64Plus | Emulator to compare against the original | All |
 
 ## Working rhythm
 
 - Short, frequent sessions. Each one ends with a commit.
-- Kick off permuter runs or local-model batches before bed or work.
-- Track progress weekly: percent of functions matched, and percent of code bytes.
-- When matching gets grindy, switch to tooling, docs, or a side quest.
+- Track progress by milestones: how far the build gets (boots, menus, a match, each fighter and stage, each feature).
+- When crash-chasing gets grindy, switch to a feature, tooling, or docs.
 - A skipped week is fine. A dead project is the only failure.
 
 ## Risks
 
 | Risk | Fallback |
 | --- | --- |
-| Compiler can't be reproduced | Non-matching decomp, or switch to recomp as the main goal |
-| Custom compression or packed code | Write a decompressor early; check Rare reference decomps |
-| Code ported from the arcade version behaves oddly | The KI2 arcade board also used a MIPS CPU (R4600); some code may be adapted from it. Treat as a hypothesis until recon |
-| Hard functions stall progress | Skip and return; use decomp.me; accept a few flagged non-matching functions |
-| Claude usage limits | Pace sessions; push bulk work to permuter and local model |
+| Custom graphics microcode RT64 doesn't support | Checked first in Phase 1; ask the RT64 community; scope as its own sub-project |
+| Custom audio microcode | Same; audio can come after first boot |
+| Rare 1172 compression on code | Decompress before recompiling; GoldenEye's tools document the format |
+| Silent miscompiles (jump tables, overlapping functions, shared code tails) | WM2K's cleanup scripts are a ready-made map of what to check |
+| High refresh rate fights the engine | Ship everything else first; high refresh is last on purpose |
+| Claude usage limits | Pace sessions; push bulk work to the local model |
 | Burnout | Rhythm rules above |
 | Accidental commit of game data | `tools/guard.py` on every commit and in CI |
 
@@ -110,20 +118,19 @@ Adapted from the [Brave Fencer Musashi decomp's lessons](https://github.com/Drut
 
 | Goes in the repo | Never goes in the repo |
 | --- | --- |
-| splat config, symbol files, linker scripts | The ROM, in any byte order |
-| Our C source and headers | Extracted assets (textures, audio, sprites, models) |
-| Build scripts, tools, Makefiles | Split assembly, generated C, binary blobs |
-| Docs, notes | Prebuilt executables containing game code |
-| The expected ROM SHA1 | Leaked SDKs or Rare material; official logos |
+| splat and recomp configs, symbol files | The ROM, in any byte order |
+| Our patches, cleanup scripts, runtime code | Extracted assets (textures, audio, sprites, models) |
+| Build scripts, CMake files, docs, notes | Generated code (`RecompiledFuncs/`, RSPRecomp output, split assembly) |
+| The expected ROM SHA1 | Executables, DLLs, archives; leaked SDKs or Rare material; official logos |
 
-Other rules: dump your own cartridge before going public, free forever, labeled as an unofficial fan project, repo private until BlackCRT chooses otherwise, comply with any takedown immediately.
+Other rules: dump your own cartridge before going public, free forever, labeled as an unofficial fan project, repo private until BlackCRT chooses otherwise, source-only releases, comply with any takedown immediately.
 
 ## Decisions log
 
 | Date | Decision |
 | --- | --- |
 | 2026-10-08 | Target ROM: Killer Instinct Gold (U) (V1.2), .z64 |
-| 2026-10-08 | Decomp is the main goal; recomp is an optional side quest |
 | 2026-10-08 | Plan lives in this repo (CLAUDE.md, PLAN.md, NOTES.md), not in outside docs |
 | 2026-10-08 | Source-only releases; no prebuilt executables |
-| 2026-10-08 | Adopted six ground rules from the BFM decomp; added Phase 5 (readability and publish check) |
+| 2026-10-08 | **Final direction: recomp with modern features** (high res, widescreen, high refresh rate, QoL). Replaces the earlier decomp-first plan; partial decomp only where a feature needs it |
+| 2026-10-08 | Work natively on Windows (the port build requires it); WSL, the Makefile, and the IDO compiler dropped |

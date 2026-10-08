@@ -1,163 +1,156 @@
 # Phase 0 setup guide
 
-For the Windows PC. Written for beginners to Linux and git. Do it in order; each part ends with a check so you know it worked.
+For the Windows PC. Everything runs natively on Windows in **PowerShell**, because the recomp's port build requires Windows tools. Do the parts in order; each one ends with a **Check** so you know it worked.
 
-Budget: one or two evenings. Do this on a PC you control.
+Budget: one or two evenings, mostly waiting on downloads. Do this on a PC you control.
 
----
-
-## Part 1: Install WSL2 and Ubuntu (Windows side)
-
-WSL2 runs a real Linux system inside Windows. All decomp tools expect Linux.
-
-1. Open **PowerShell as Administrator** (Start menu, type "PowerShell", right-click, Run as administrator).
-2. Run:
-   ```powershell
-   wsl --install -d Ubuntu-24.04
-   ```
-3. Restart the PC when it asks.
-4. After restart, an Ubuntu window opens. Pick a **username** (lowercase, no spaces) and a **password**.
-   - When you type the password, nothing shows on screen. That's normal Linux behavior, keep typing and press Enter.
-   - You'll need this password for any command starting with `sudo`.
-
-**Check:** in the Ubuntu window, run `uname -a`. You should see a line containing `Linux` and `WSL2`.
-
-From here on, every command goes in the **Ubuntu** window unless it says PowerShell. Tip: install **Windows Terminal** from the Microsoft Store; it gives Ubuntu tabs and easy copy/paste.
+Tip: use **Windows Terminal** (preinstalled on Windows 11, or from the Microsoft Store). When a step says "open a new terminal," close the tab and open a fresh one so it picks up newly installed programs.
 
 ---
 
-## Part 2: Ten Linux commands you'll actually use
+## Part 1: Git, Python, and the GitHub CLI
 
-| Command | What it does | Windows equivalent |
-| --- | --- | --- |
-| `pwd` | Show which folder you're in | `cd` with no arguments |
-| `ls` | List files in this folder | `dir` |
-| `cd foldername` | Go into a folder | `cd` |
-| `cd ~` | Go to your home folder | `cd $HOME` |
-| `cd ..` | Go up one folder | `cd ..` |
-| `mkdir name` | Make a folder | `mkdir` |
-| `cp a b` | Copy a file | `copy` |
-| `nano file` | Edit a file (Ctrl+O to save, Ctrl+X to exit) | Notepad |
-| `sudo command` | Run as admin | Run as administrator |
-| `explorer.exe .` | Open this folder in File Explorer | |
+In a normal (not admin) PowerShell:
 
-Your Windows drives live under `/mnt/c/`. Your Windows Downloads folder is `/mnt/c/Users/<your Windows name>/Downloads`.
+```powershell
+winget install --id Git.Git -e
+winget install --id Python.Python.3.12 -e
+winget install --id GitHub.cli -e
+```
 
-**Rule:** keep the project in your Linux home folder (`~`), not under `/mnt/c/`. It's much faster and avoids permission weirdness.
+Open a new terminal, then:
 
----
+```powershell
+git --version
+python --version
+gh --version
+```
 
-## Part 3: Install the base toolchain
-
-1. Update Ubuntu:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
-2. Install build tools, git, Python, and the MIPS assembler/linker:
-   ```bash
-   sudo apt install -y build-essential git python3 python3-pip python3-venv \
-     binutils-mips-linux-gnu make cmake ninja-build pkg-config libcapstone-dev \
-     curl unzip gh
-   ```
-
-**Check:** `mips-linux-gnu-as --version` and `git --version` each print a version.
+**Check:** all three print a version. If `python` opens the Microsoft Store instead, go to **Settings > Apps > Advanced app settings > App execution aliases**, turn off the two "python" aliases, and open a new terminal.
 
 ---
 
-## Part 4: git identity (resume-safe)
+## Part 2: Visual Studio Build Tools (the port compiler)
 
-Commits record a name and email. To keep your real name and email out of a public repo:
+This installs clang-cl, CMake, and Ninja, the same toolchain the WrestleMania 2000 recomp uses. It's a large download (several GB) and asks for admin approval (UAC):
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended"
+```
+
+**Check:** open **Developer PowerShell for VS 2022** from the Start menu and run:
+
+```powershell
+clang-cl --version
+cmake --version
+ninja --version
+```
+
+All three should print a version. We won't use these until Phase 2, but it's good to know they work.
+
+---
+
+## Part 3: git identity (resume-safe) and GitHub login
+
+Commits record a name and email. To keep your real name and email out of the repo:
 
 1. On github.com go to **Settings > Emails**, turn on **Keep my email addresses private**, and copy the address that looks like `12345678+BlackCRT@users.noreply.github.com`.
-2. In Ubuntu:
-   ```bash
+2. In PowerShell:
+   ```powershell
    git config --global user.name "BlackCRT"
    git config --global user.email "PASTE_THE_NOREPLY_ADDRESS_HERE"
-   git config --global init.defaultBranch main
+   git config --global core.longpaths true
    ```
+   `core.longpaths` avoids "Filename too long" errors from the deeply nested runtime libraries we'll pull in later.
 3. Log the GitHub CLI into your account:
-   ```bash
+   ```powershell
    gh auth login
    ```
-   Pick **GitHub.com**, **HTTPS**, **Yes** to authenticate git, and **Login with a web browser**. It shows a code; paste it in the browser page that opens.
+   Pick **GitHub.com**, **HTTPS**, **Yes** to authenticate git, and **Login with a web browser**. It shows a code; paste it into the browser page that opens.
 
 **Check:** `gh auth status` says you're logged in as BlackCRT.
 
 ---
 
-## Part 5: Install Claude Code
+## Part 4: Install Claude Code
 
-1. In Ubuntu:
-   ```bash
-   curl -fsSL https://claude.ai/install.sh | bash
-   ```
-2. Close the Ubuntu window and open a new one.
-3. Run `claude --version`. It should print a version number.
-4. Log in: run `claude` and follow the browser prompt with your Pro account. Type `/exit` to leave for now.
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+Open a new terminal, then run `claude --version`. It should print a version number. Then run `claude`, log in with your Pro account in the browser, and type `/exit`.
+
+Because Git for Windows is installed, Claude Code can use Git Bash for shell commands as well as PowerShell.
 
 Source: [Claude Code setup docs](https://code.claude.com/docs/en/setup).
 
 ---
 
-## Part 6: Get the repo onto your PC
+## Part 5: Get the repo
 
-The private repo `BlackCRT/ki-gold-decomp` already exists on GitHub with the starter kit in it. You just download ("clone") it.
+Use a short folder path. Deep paths (like OneDrive Documents) cause "Filename too long" errors later.
 
-1. Clone it into your Linux home folder:
-   ```bash
-   cd ~
-   git clone https://github.com/BlackCRT/ki-gold-decomp.git
-   cd ki-gold-decomp
-   ls -a
-   ```
-   You should see `CLAUDE.md`, `PLAN.md`, `NOTES.md`, `README.md`, `.gitignore`, `tools`, `docs`, and more.
-2. Switch on the guard. This setting is per-computer, so it has to be done on every machine you work from:
-   ```bash
-   git config core.hooksPath .githooks
-   ```
+```powershell
+mkdir C:\src
+cd C:\src
+git clone https://github.com/BlackCRT/ki-gold-decomp.git
+cd ki-gold-decomp
+git config core.hooksPath .githooks
+```
 
-**Check:** `git config core.hooksPath` prints `.githooks`, and on github.com the repo shows a lock icon (private).
+The last line switches on the legal guard. It's a per-computer setting, so it's needed on every machine you work from.
+
+**Check:** `git config core.hooksPath` prints `.githooks`, and `dir` shows `CLAUDE.md`, `PLAN.md`, `NOTES.md`, `tools`, and `docs`.
 
 ---
 
-## Part 7: Add the ROM and prove the guard works
+## Part 6: Add the ROM and prove the guard works
 
-1. Copy your ROM into the repo with the exact name the project expects:
-   ```bash
-   cp "/mnt/c/path/to/Killer Instinct Gold (U) (V1.2) [!].z64" ~/ki-gold-decomp/baserom.us.z64
+1. Copy your ROM into the repo with the exact name the project expects (quotes matter because of the spaces and brackets):
+   ```powershell
+   Copy-Item "C:\path\to\Killer Instinct Gold (U) (V1.2) [!].z64" .\baserom.us.z64
    ```
-   Quotes matter because the filename has spaces and brackets.
-2. Install the project's tools (Python packages and the IDO compiler), then check the ROM:
-   ```bash
-   make setup
-   make check
+2. Check it:
+   ```powershell
+   python tools\romcheck.py
    ```
-   `make check` prints the ROM's name, region, revision, and SHA1 fingerprint. It should say USA, revision 2 (V1.2), and 12.00 MB. If it says the byte order is wrong, it prints the exact command to fix it.
-3. Open `tools/rom.sha1` with `nano tools/rom.sha1`, paste the 40-character SHA1 from `make check` on its own line at the bottom, save (Ctrl+O, Enter) and exit (Ctrl+X). Run `make check` again; it should now say `OK: SHA1 matches`.
+   It prints the ROM's name, region, revision, size, and SHA1. It should say USA, revision 2 (V1.2), and 12.00 MB. If the byte order is wrong, it prints the exact command to fix it.
+3. Record the SHA1: run `notepad tools\rom.sha1`, paste the 40-character SHA1 on its own line at the bottom, save, and close. Run `python tools\romcheck.py` again; it should now say `OK: SHA1 matches`.
 4. **Test the guard.** Force-add the ROM and try to commit it. This should FAIL on purpose:
-   ```bash
+   ```powershell
    git add -f baserom.us.z64
    git commit -m "this should be blocked"
    ```
    You should see `guard: BLOCKED` with several reasons.
-5. Unstage it again, then commit the hash file:
-   ```bash
+5. Unstage it, then commit and push the hash file:
+   ```powershell
    git restore --staged baserom.us.z64
-   git add tools/rom.sha1
+   git add tools\rom.sha1
    git commit -m "Record ROM SHA1"
    git push
    ```
 
-**Check:** `git status` does not list `baserom.us.z64` at all (it's ignored), and the guard test was blocked.
+**Check:** `git status` doesn't list `baserom.us.z64` (it's ignored), the guard test was blocked, and on github.com the **Actions** tab shows a green `guard` run.
+
+---
+
+## Part 7: Python tools for recon
+
+Phase 1 uses splat and friends. They go in their own virtual environment inside `disasm\` so they don't clutter your system Python:
+
+```powershell
+python -m venv disasm\.venv
+disasm\.venv\Scripts\pip install -r requirements.txt
+```
+
+**Check:** `disasm\.venv\Scripts\python -m splat --help` prints splat's help.
 
 ---
 
 ## Part 8: Local AI model (Ollama)
 
-Ollama runs on Windows so it gets full use of your GPU.
-
 1. Download and install Ollama for Windows from [ollama.com](https://ollama.com).
-2. In **PowerShell** (normal, not admin):
+2. In PowerShell:
    ```powershell
    ollama pull qwen2.5-coder:14b
    ollama run qwen2.5-coder:14b "Explain what a MIPS jal instruction does in two sentences."
@@ -166,20 +159,18 @@ Ollama runs on Windows so it gets full use of your GPU.
 
 **Check:** you get a sensible two-sentence answer. Type `/bye` if it opens a chat.
 
-We'll connect Ollama to the Linux side in Phase 1 when we actually need it.
-
 ---
 
 ## Part 9: Hand off to Claude Code
 
-```bash
-cd ~/ki-gold-decomp
+```powershell
+cd C:\src\ki-gold-decomp
 claude
 ```
 
 Then type: **"Read CLAUDE.md, PLAN.md, and NOTES.md, then tell me where we are and what's next."**
 
-Phase 0 is done when every **Check** above passed. Tick the boxes in `PLAN.md` (or ask Claude Code to).
+Phase 0 is done when every **Check** above passed. Ask Claude Code to tick the boxes in `PLAN.md`. Your first Phase 1 command is `python tools\scan_rom.py`.
 
 ---
 
@@ -194,4 +185,4 @@ Using a dump of a cartridge you own is the cleanest legal footing for a public r
 | **RetroBlaster 2.0 + N64 adapter** | Works, Windows-only software, set to 3V. |
 | GameShark / Action Replay, old copiers | Not recommended; unreliable dumps. |
 
-After dumping, run `sha1sum` on your dump and compare with `tools/rom.sha1`. A match means your dump is identical to the one you're working from.
+After dumping, check it with `python tools\romcheck.py` (temporarily named `baserom.us.z64`). A SHA1 match means your dump is identical to the one you're working from.

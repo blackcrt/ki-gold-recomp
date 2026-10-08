@@ -4,6 +4,8 @@ GoldenEye ([n64decomp/007](https://github.com/n64decomp/007)) is 100% matched an
 
 Everything here is a **lead**, not a fact about KI Gold. KI Gold shipped in late 1996, GoldenEye in 1997, so Rare's tools and library versions may differ.
 
+**Relevance to the recomp:** written when the plan was a matching decomp. For the recomp, the **libultra** and **compression** sections matter most: identifying libultra functions is how the symbol file tells the runtime which functions to replace, and compressed code must be decompressed before N64Recomp can read it. The compiler section only matters for the optional partial decomp (Phase 6).
+
 ## Compiler and flags
 
 | Setting | GoldenEye value | Use for KI Gold |
@@ -29,7 +31,7 @@ Everything here is a **lead**, not a fact about KI Gold. KI Gold shipped in late
 - About 173 library files are linked in total, listed explicitly in `src/libultrare/Makefile.libultrare`.
 
 **For KI Gold:**
-1. Read the libultra version letter from the ROM header (`make check` prints it). If it's earlier than G, expect small differences.
+1. Read the libultra version letter from the ROM header (`python tools\romcheck.py` prints it). If it's earlier than G, expect small differences.
 2. Fingerprint the standard libultra functions first (gu math, pi, si, sp, vi, ai, audio library). These are the easiest wins.
 3. Then compare against the `libultrare` versions. If KI Gold matches Rare's modified copies, that proves shared in-house code.
 
@@ -39,12 +41,12 @@ Everything here is a **lead**, not a fact about KI Gold. KI Gold shipped in late
 - Decompressor in the game is a modified copy of Mark Adler's public-domain `inflate.c` from gzip 1.2.4 (`src/inflate/inflate.c`).
 - GoldenEye recompresses with a decomp-built gzip (`tools/gzipsrc`) at `--best` to get byte-identical output.
 
-**For KI Gold:** `make scan` searches the ROM for `11 72` blocks and test-inflates each one. If it finds valid blocks, the same format is in use. If it finds none, look for a different or earlier scheme.
+**For KI Gold:** `python tools\scan_rom.py` searches the ROM for `11 72` blocks and test-inflates each one. If it finds valid blocks, the same format is in use. If it finds none, look for a different or earlier scheme.
 
 ## Microcode
 
 - GoldenEye's repo has `rsp/rspboot.s` and `rsp/graphics/gmain.s` (graphics microcode source).
-- **For KI Gold:** `make scan` lists microcode name strings found in the ROM. That answers the biggest open risk in `PLAN.md`.
+- **For KI Gold:** `python tools\scan_rom.py` lists microcode name strings found in the ROM. That answers the biggest open risk in `PLAN.md`.
 
 ## Build structure worth copying
 

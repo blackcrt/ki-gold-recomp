@@ -2,7 +2,7 @@
 
 What we learned from public sources before touching the ROM. Everything here is a lead to confirm in Phase 1, not a fact about KI Gold yet.
 
-Researched 2026-10-08.
+Researched 2026-10-08, when the plan was a matching decomp. Still relevant to the recomp: the microcode, compression, libultra, and arcade-heritage leads all feed Phase 1 recon. The compiler leads only matter for the optional partial decomp.
 
 ## No existing KI Gold decomp or recomp
 
