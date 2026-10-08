@@ -42,4 +42,9 @@ Every commit must contain only our own original work.
 | `NOTES.md` | Dated session log |
 | `docs/SETUP.md` | Phase 0 setup guide for the Windows PC |
 | `docs/RESEARCH.md` | Pre-recon findings and sources |
+| `docs/GOLDENEYE.md` | What to borrow from the GoldenEye decomp (compiler, libultra, compression) |
+| `Makefile` | All commands; run `make` to list them |
 | `tools/guard.py` | Legal guard: blocks ROMs, binaries, big files |
+| `tools/romcheck.py` | Checks the ROM (`make check`), converts byte order |
+| `tools/scan_rom.py` | Recon scan for microcode and compression (`make scan`) |
+| `tools/progress.py` | Matched-code progress (`make progress`) |

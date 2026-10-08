@@ -42,10 +42,11 @@ See `docs/RESEARCH.md` for details and sources.
 
 ### Phase 1 checklist
 
-- [ ] Write the first splat config and get a clean split
-- [ ] Search the ROM for microcode name strings (for example "F3DEX", "RSP Gfx ucode") to identify graphics and audio microcode
-- [ ] Identify compression on code and data (Rare used its own inflate-based compression in other games)
-- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrarare`
+- [ ] `make check` passes (right ROM, z64 order, SHA1 recorded)
+- [ ] `make scan`: identify graphics and audio microcode from the strings it finds
+- [ ] `make scan`: confirm whether Rare's 1172 compression is used, and where
+- [ ] `make config` then `make split`: first clean split
+- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`)
 - [ ] Confirm the compiler (IDO 5.3 is the working guess) by matching one small function
 - [ ] Count functions and estimate the size of the job
 - [ ] Decomp checkpoint: write findings to `NOTES.md` and confirm the plan

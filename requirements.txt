@@ -1,0 +1,8 @@
+# Python tools for the KI Gold decomp. Installed into .venv by `make setup`.
+# Pinned so every machine gets the same splat behavior.
+splat64[mips]==0.50.0
+
+# Added in later phases (not on PyPI or not needed yet):
+#   m2c            first-pass C from assembly (installed from GitHub in Phase 4)
+#   decomp-permuter near-match brute forcer (cloned from GitHub in Phase 4)
+#   objdiff        function diffing (downloaded binary in Phase 3)

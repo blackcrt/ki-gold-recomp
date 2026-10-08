@@ -17,6 +17,10 @@ nonmatchings/
 *.elf
 *.map
 *.bin
+*.d
+
+# ---- Downloaded tools ----
+tools/ido/
 
 # ---- Tooling caches ----
 __pycache__/

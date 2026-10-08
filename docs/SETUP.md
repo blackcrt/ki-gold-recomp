@@ -127,11 +127,13 @@ The private repo `BlackCRT/ki-gold-decomp` already exists on GitHub with the sta
    cp "/mnt/c/path/to/Killer Instinct Gold (U) (V1.2) [!].z64" ~/ki-gold-decomp/baserom.us.z64
    ```
    Quotes matter because the filename has spaces and brackets.
-2. Get its fingerprint (SHA1):
+2. Install the project's tools (Python packages and the IDO compiler), then check the ROM:
    ```bash
-   sha1sum baserom.us.z64
+   make setup
+   make check
    ```
-3. Open `tools/rom.sha1` with `nano tools/rom.sha1`, paste the 40-character hash on its own line at the bottom, save (Ctrl+O, Enter) and exit (Ctrl+X).
+   `make check` prints the ROM's name, region, revision, and SHA1 fingerprint. It should say USA, revision 2 (V1.2), and 12.00 MB. If it says the byte order is wrong, it prints the exact command to fix it.
+3. Open `tools/rom.sha1` with `nano tools/rom.sha1`, paste the 40-character SHA1 from `make check` on its own line at the bottom, save (Ctrl+O, Enter) and exit (Ctrl+X). Run `make check` again; it should now say `OK: SHA1 matches`.
 4. **Test the guard.** Force-add the ROM and try to commit it. This should FAIL on purpose:
    ```bash
    git add -f baserom.us.z64
