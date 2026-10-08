@@ -12,7 +12,7 @@ No public decompilation or recompilation of Killer Instinct Gold was found. We s
 
 - 100% matching as of August 2026, after about nine years of community work ([Time Extension](https://www.timeextension.com/news/2026/08/after-9-years-of-work-goldeneye-007-n64-is-now-100percent-decompiled)).
 - Built with **IDO 5.3**, with `-O2` for the final build. Supports building through ido-static-recomp, so no IRIX emulation needed ([repo](https://github.com/n64decomp/007)).
-- Keeps two libultra copies: standard `libultra` and **`libultrarare`, a Rare-modified libultra**. KI Gold shipped about a year earlier from the same studio, so its libultra may match one of these closely.
+- Keeps two libultra copies: standard `libultra` and **`libultrare`, a Rare-modified libultra**. KI Gold shipped about a year earlier from the same studio, so its libultra may match one of these closely.
 - Has an `inflate` folder for Rare's startup decompression code. KI Gold may use the same or an earlier version of that compression.
 
 **Why it matters:** GoldenEye gives us a likely compiler, a likely libultra, and a matched codebase to fingerprint against. That could knock out all library code early.
@@ -42,5 +42,5 @@ No public decompilation or recompilation of Killer Instinct Gold was found. We s
 | Audio microcode | Same string search; compare with known aspMain versions |
 | Compression | Look for Rare's inflate routine and compressed segments while splitting |
 | Compiler | Match one small function with IDO 5.3 at -O2; try other versions if it fails |
-| libultra version | Fingerprint against GoldenEye's `libultra` and `libultrarare` |
+| libultra version | Fingerprint against GoldenEye's `libultra` and `libultrare` |
 | Function count | Count after the first clean splat split |
