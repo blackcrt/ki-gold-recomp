@@ -2,6 +2,39 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: GoldenEye reference and data-address check (session 3)
+
+**Done**
+- `tools/build_libultra_ref.py` now also fetches a pinned copy of `n64decomp/007` (GoldenEye) into `build/ref/ge007/` and builds two more reference folders: `ge007_libultra_G` (121 of 121 C files compile) and `ge007_libultrare`, Rare's modified files (30 of 30). Flags come from GoldenEye's own Makefile. Nothing in `build/ref/` is committed.
+- GoldenEye's 23 assembly files are written for the GNU assembler, which we do not have. No install was needed: each line carries the instruction's bytes in a comment, so the build script copies them and the fingerprint tool reads the text.
+- `tools/fingerprint_libultra.py` now compares **data addresses**. Confirmed functions fix where each libultra variable lives in the game (kept apart per segment). An unconfirmed function gets a name only when one candidate name reads variables at exactly those addresses, every other candidate name is contradicted, and no other game function fits the name too. The report also lists any variable that two confirmed functions place differently.
+- **Finding: GoldenEye's assembly listings have wrong labels.** Its `pirawwrite.s` is labelled `osPiRawWriteIo`, but the code reads from the cartridge and stores to the caller's pointer, so it is `osPiRawReadIo` (our existing name, from the compiled ultralib object, was right). Its `bzero.s` also calls `bzero` `memset`. New tool rule: a name from a compiled object always wins over a listing label, and a match that only a listing supports is never confirmed.
+- Test: `tools/test_fingerprint_libultra.py` grew from 27 to 39 checks (identical pair settled by data, pair nobody can settle, tiny function with agreeing data, wrong-address trap, two-fits trap, the listing reader, and the two listing trust rules). 39/39 pass.
+- Run on the game, four reference folders: **201 confirmed (was 185), 48 likely, 655 no match.** All 185 earlier names came back at the same addresses. **0 data address conflicts** among confirmed functions, which is an independent check on the earlier names.
+- Main score, confirmed names only: `reimplemented_funcs` **44 of 116** (was 34), `ignored_funcs` 79 of 358 (was 66), `renamed_funcs` 3 of 83.
+- The 16 new names, all appended to `disasm/symbol_addrs.txt` with evidence:
+  - From Rare's modified files (`libultrare`), exact matches: `osSpTaskLoad`, `osDestroyThread`, `osAiSetNextBuffer`, `osContStartReadData`, `osEepromProbe`, `osEepromRead`, `osEepromWrite`, `__osEepStatus`, `__osPackRequestData`, `__osPackEepReadData`, `alFxParamHdl`.
+  - From version G: `guLookAtReflectF`, `guMtxL2F`.
+  - Settled by data addresses: `osViGetCurrentFramebuffer` and `osViGetNextFramebuffer` (identical code, told apart by `__osViCurr` at 0x80007040 and `__osViNext` at 0x80007044), and `osGetThreadPri` (6 instructions, reads `__osRunningThread` at 0x80006FB0, the address confirmed functions use).
+- **KI Gold matches Rare's modified library files, not the stock ones.** That proves shared in-house library code between KI Gold and GoldenEye, as `docs/GOLDENEYE.md` guessed. It also answers one question: the game saves to **EEPROM** (probe, read, and write are all present in stream1).
+- Re-ran the splat split: exit 0, no errors, still 904 functions, same 201 on a second fingerprint run.
+
+**Stuck / unknown**
+- **72 of 116 reimplemented functions are still not confirmed.**
+  - 14 exist in the GoldenEye reference and still found no match: `osInitialize`, `osCreatePiManager`, `osCreateViManager`, `osPiStartDma`, `osPiReadIo`, `osPiGetStatus`, `osEPiRawStartDma`, `osContInit`, `osSetIntMask`, `osStopThread`, `osViSetXScale`, `osViSetYScale`, `__ull_to_d`, `__ull_to_f`. Either KI Gold's version D code differs from G here, or the game does not use them. Not checked per function.
+  - 6 are likely but not named: `osEepromLongRead` / `osEepromLongWrite` (two game functions, two names, identical code), `__ull_rem` (same code as `__ll_rem`), `osSpTaskYield` (7 instructions), `osAiGetLength` and `__osSetFpcCsr` (3 instructions, no confirmed function reads the same variable).
+  - 39 exist only in ultralib and found no match. Most are hardware a 1996 game cannot have (flash, rumble, 64DD cart init, debugger). The ones that could matter: `osAiGetStatus`, `osGetMemSize`, `osSetTime`, `osStopTimer`, `osGetThreadId`, `osContSetCh`, and the `osPfs*` Controller Pak set.
+  - 13 are in no reference (voice, `__osInitialize_common`, `osSetCount`, and so on).
+- OS core from the ignored list still missing: `__osException`, `__osDispatchThread`, `__osEnqueueAndYield`, `__osDevMgrMain`, `__osViInit`, `osYieldThread`. GoldenEye's `exception.s` gave one lead only: its `send_mesg` label matches the game at 0x800042F8 except for two local jump distances. So the exception handler is there but its layout differs from version G.
+- The Pi and Si access queue functions are not settled. Data cannot do it (no confirmed function reads the queue variables directly), and the caller rule refuses because boot and stream1 each hold a copy, so each name fits two addresses. Same for `memcpy`, `strlen`, `strchr`. This needs a decision on how to name duplicate copies; a symbol file cannot hold one name twice.
+- One judgement call to review: `osGetThreadPri` is only 6 instructions. It was named because its code is unique in the reference and its data address agrees. The floor for a data-confirmed name is 3 instructions (`MIN_DATA_INSTR`); the 8 instruction floor still applies to everything else.
+- Stream3 is still only half decoded.
+
+**Next**
+- Cheap and strict: let a confirmed *callee* rule out a candidate name, the mirror of the data rule. `osEepromLongRead` calls `osEepromRead` and `osEepromLongWrite` calls `osEepromWrite`, and both of those are now confirmed, so this would settle that pair. Not done, since it was not asked for.
+- Decide how to name the duplicate boot and stream1 copies.
+- For the 14 start-up, Pi, and Vi functions that match neither I nor G: find them by hand from their confirmed callers and callees (for example, whatever calls `osCreateThread` with the Pi and Vi manager setup), then compare against the reference source line by line.
+
 ## 2026-10-08: libultra fingerprint run on the game (session 2 of 2)
 
 **Done**

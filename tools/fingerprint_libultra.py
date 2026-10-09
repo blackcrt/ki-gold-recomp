@@ -22,8 +22,18 @@ A candidate only becomes a CONFIRMED name when all of these hold:
     functions land at the same distance as in the reference
   - not isolated: it has a matching neighbour or an agreeing call
 
-A tiny or ambiguous candidate can still be confirmed when a confirmed function
-calls it by that name. Everything else is LIKELY: reported, never named.
+A tiny or ambiguous candidate can still be confirmed in two ways:
+  - a confirmed function calls it by that name
+  - data addresses: confirmed functions fix where each library variable lives
+    in the game. A candidate name is accepted when the variables it reads sit
+    at exactly those addresses, every other candidate name for the function is
+    contradicted by them, and no other game function fits the name as well.
+Everything else is LIKELY: reported, never named.
+
+References are ELF objects (.o) and, for GoldenEye, assembly listings (.s) that
+carry each instruction's bytes in a comment. A listing's labels were typed in
+by hand and some are wrong, so a name from a compiled object always wins over
+a listing's, and a match that only a listing supports is never confirmed.
 
 Usage:
   python3 tools/fingerprint_libultra.py
@@ -43,12 +53,14 @@ DEFAULT_REF = REPO / "build" / "ref" / "obj"
 DEFAULT_LISTS = REPO / "build" / "ref" / "N64Recomp" / "src" / "symbol_lists.cpp"
 
 MIN_INSTR = 8   # below this a fingerprint alone proves nothing
+MIN_DATA_INSTR = 3  # smallest function a data address match may name
 WINDOW = 3      # neighbour check: look this many functions each way
 
 # ELF constants
 SHT_SYMTAB, SHT_REL = 2, 9
 STT_FUNC = 2
-R_MIPS_32, R_MIPS_26 = 2, 4
+R_MIPS_32, R_MIPS_26, R_MIPS_HI16, R_MIPS_LO16 = 2, 4, 5, 6
+STB_GLOBAL, STT_SECTION, SHN_COMMON = 1, 3, 0xFFF2
 RELOC_16 = {5, 6, 7, 8, 9, 10, 11}  # HI16, LO16, GPREL16, LITERAL, GOT16, PC16, CALL16
 JUMP_MASK = 0x03FFFFFF
 
@@ -65,6 +77,10 @@ class RefFunc:
     words: list            # instructions, trailing nops stripped
     masks: list            # per word: bits that depend on the link address
     calls: dict            # word index -> ("sym", name) or ("static", distance from function start)
+    listing: bool = False  # read from an assembly listing, not a compiled object
+    # Address pairs: (index of the high half, index of the low half, key, offset).
+    # key is ("sym", name) for a named variable, or ("local", source, obj, section).
+    data: list = field(default_factory=list)
 
     @property
     def informative(self) -> int:
@@ -92,6 +108,15 @@ class Match:
     confirmed: bool
     evidence: str          # for confirmed: why. for likely: why not
     refs: list = field(default_factory=list)
+
+
+def sext16(value: int) -> int:
+    return value - 0x10000 if value & 0x8000 else value
+
+
+def pair_value(words: list, hi: int, lo: int) -> int:
+    """The address a lui/low-half instruction pair builds."""
+    return ((words[hi] & 0xFFFF) << 16) + sext16(words[lo] & 0xFFFF)
 
 
 def strip_nops(words: list) -> list:
@@ -128,9 +153,24 @@ def read_object(data: bytes, source: str, obj: str) -> list:
         return []
     strtab = body(secs[symtab[6]])
     syms = []  # (name, value, size, type, shndx)
+    binds = []
     for i in range(symtab[5] // 16):
         n, value, size, info, _, shndx = struct.unpack_from(">IIIBBH", data, symtab[4] + i * 16)
         syms.append((cstr(strtab, n), value, size, info & 15, shndx))
+        binds.append(info >> 4)
+
+    def data_key(symidx: int, addend: int):
+        """Which variable an address pair points at: (key, offset), or None."""
+        sname, svalue, _, stype, sshndx = syms[symidx]
+        if sshndx in (0, SHN_COMMON):
+            return ("sym", sname), addend
+        if sshndx >= len(secs):
+            return None
+        if sshndx == text_idx and svalue + addend in func_at and (stype == STT_SECTION or addend == 0):
+            return ("sym", func_at[svalue + addend][0]), 0
+        if binds[symidx] == STB_GLOBAL and stype != STT_SECTION and sname:
+            return ("sym", sname), addend
+        return ("local", source, obj, names[sshndx]), svalue + addend
 
     starts = sorted({v for _, v, _, t, sh in syms if t == STT_FUNC and sh == text_idx})
     func_at = {}
@@ -154,8 +194,17 @@ def read_object(data: bytes, source: str, obj: str) -> list:
         words = list(struct.unpack_from(f">{size // 4}I", text, start))
         masks = [0] * len(words)
         calls = {}
+        pairs = []
+        last_hi = {}  # symbol index -> word index of its latest high half
         for i in range(len(words)):
             for rtype, symidx in relocs.get(start + i * 4, ()):
+                if rtype == R_MIPS_HI16:
+                    last_hi[symidx] = i
+                elif rtype == R_MIPS_LO16 and symidx in last_hi:
+                    hi = last_hi[symidx]
+                    found = data_key(symidx, pair_value(words, hi, i))
+                    if found:
+                        pairs.append((hi, i, *found))
                 if rtype == R_MIPS_26:
                     masks[i] |= JUMP_MASK
                     sname, svalue, _, stype, sshndx = syms[symidx]
@@ -175,17 +224,91 @@ def read_object(data: bytes, source: str, obj: str) -> list:
                     masks[i] = 0xFFFFFFFF
         keep = len(strip_nops(words))
         funcs.append(RefFunc(name, source, obj, words[:keep], masks[:keep],
-                             {i: c for i, c in calls.items() if i < keep}))
+                             {i: c for i, c in calls.items() if i < keep},
+                             data=[d for d in pairs if d[1] < keep]))
+    return funcs
+
+
+ASM_REF_LINE = re.compile(r"\s*/\* [0-9A-Fa-f]+ ([0-9A-Fa-f]{8}) ([0-9A-Fa-f]{8}) \*/([^#]*)")
+ASM_JUMP = re.compile(r"\s*(?:jal|j)\s+([^\s,]+)\s*$")
+ASM_HALF = re.compile(r"%(hi|lo)\(([^)]*)\)")
+ASM_EXPR = re.compile(r"([A-Za-z_]\w*)\s*(?:([+-])\s*(0x[0-9A-Fa-f]+|\d+))?$")
+ASM_LOCAL = re.compile(r"\.L([0-9A-Fa-f]{8})$")
+
+
+def read_asm_reference(text: str, source: str, obj: str) -> list:
+    """Reference functions from an assembly listing with the bytes in comments.
+
+    The listing does not say where a function ends, and a glabel can be a
+    label in the middle of one. So every glabel is offered with every possible
+    end (each later glabel, and the end of the code). Only the stretch that is
+    exactly one game function can match.
+    """
+    rows, labels, in_text = [], [], True  # rows: (address, word, operand text)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith((".section", ".text", ".data", ".rodata", ".bss")):
+            in_text = ".text" in stripped.split("#")[0]
+        elif not in_text:
+            continue
+        elif stripped.startswith("glabel "):
+            labels.append((len(rows), stripped.split()[1]))
+        else:
+            m = ASM_REF_LINE.match(line)
+            if m:
+                rows.append((int(m.group(1), 16), int(m.group(2), 16), m.group(3)))
+    labels = [(at, name) for at, name in labels if at < len(rows)]
+    address_of = {name: rows[at][0] for at, name in labels}
+
+    funcs = []
+    for n, (start, name) in enumerate(labels):
+        seen = set()
+        for end in [at for at, _ in labels[n + 1:] if at > start] + [len(rows)]:
+            span = rows[start:end]
+            if any(b[0] - a[0] != 4 for a, b in zip(span, span[1:])):
+                break  # a gap in the addresses: not one piece of code
+            keep = len(strip_nops([w for _, w, _ in span]))
+            if not keep or keep in seen:
+                continue
+            seen.add(keep)
+            words, masks, calls, pairs, last_hi = [], [], {}, [], {}
+            for i, (_, word, operands) in enumerate(span[:keep]):
+                mask = 0
+                jump = ASM_JUMP.match(operands)
+                if jump:
+                    mask = JUMP_MASK
+                    target, local = jump.group(1), ASM_LOCAL.match(jump.group(1))
+                    if target in address_of:
+                        calls[i] = ("static", address_of[target] - span[0][0])
+                    elif local:
+                        calls[i] = ("static", int(local.group(1), 16) - span[0][0])
+                    else:
+                        calls[i] = ("sym", target)
+                for half, expr in ASM_HALF.findall(operands):
+                    mask |= 0xFFFF
+                    expr = expr.strip()
+                    if half == "hi":
+                        last_hi[expr] = i
+                    elif expr in last_hi and ASM_EXPR.match(expr):
+                        sym, sign, number = ASM_EXPR.match(expr).groups()
+                        offset = int(number, 0) * (-1 if sign == "-" else 1) if number else 0
+                        pairs.append((last_hi[expr], i, ("sym", sym), offset))
+                words.append(word)
+                masks.append(mask)
+            funcs.append(RefFunc(name, source, obj, words, masks, calls, True, pairs))
     return funcs
 
 
 def load_references(ref_root: Path) -> list:
-    """Every .o under ref_root/<source>/. Sources are read in name order."""
+    """Every .o and .s under ref_root/<source>/. Sources are read in name order."""
     refs = []
     for source_dir in sorted(p for p in ref_root.iterdir() if p.is_dir()):
         for path in sorted(source_dir.rglob("*.o")):
             obj = path.relative_to(source_dir).as_posix()
             refs += read_object(path.read_bytes(), source_dir.name, obj)
+        for path in sorted(source_dir.rglob("*.s")):
+            obj = path.relative_to(source_dir).as_posix()
+            refs += read_asm_reference(path.read_text(), source_dir.name, obj)
     return refs
 
 
@@ -236,6 +359,30 @@ def jump_target(game: GameFunc, index: int) -> int:
     return (pc & 0xF0000000) | ((game.words[index] & JUMP_MASK) << 2)
 
 
+def data_bases(game: GameFunc, refs: list) -> set:
+    """Where the game puts each variable, if `game` is the function `refs` describe.
+
+    Returns {(key, address)}: the address the game's instruction pair builds,
+    less the offset the reference adds to the variable.
+    """
+    return {(key, (pair_value(game.words, hi, lo) - offset) & 0xFFFFFFFF)
+            for ref in refs for hi, lo, key, offset in ref.data}
+
+
+def known_data(named: list) -> dict:
+    """(segment, key) -> addresses, from (game function, name, its references).
+
+    A key with more than one address is a conflict and proves nothing.
+    Segments are kept apart because each may be linked with its own copy.
+    """
+    known = defaultdict(set)
+    for g, name, refs in named:
+        known[g.segment, ("sym", name)].add(g.vram)
+        for key, base in data_bases(g, refs):
+            known[g.segment, key].add(base)
+    return known
+
+
 def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = WINDOW) -> list:
     """Return one Match for every game function that has at least one candidate."""
     refs_by_len = defaultdict(list)
@@ -250,7 +397,10 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
         for r in refs_by_len.get(len(g.words), ()):
             if is_exact(g, r):
                 found[r.name].append(r)
-        cands.append(dict(found))
+        # Names from compiled objects win over hand-typed listing labels.
+        compiled = {name for name, rs in found.items() if not all(r.listing for r in rs)}
+        cands.append({name: sorted(rs, key=lambda r: r.listing) for name, rs in found.items()
+                      if name in compiled or not compiled})
     game_by_name = defaultdict(list)
     for i, found in enumerate(cands):
         for name in found:
@@ -326,6 +476,8 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
                 reasons.append(f"{len(game_by_name[name])} game functions match this name")
             if ref.informative < min_instr:
                 reasons.append(f"only {ref.informative} instructions")
+            if ref.listing:
+                reasons.append("the name comes only from an assembly listing")
             reasons += problems
             if not reasons and not agree and not has_neighbour(i):
                 reasons.append("isolated: no matching neighbour and no agreeing call")
@@ -334,7 +486,51 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
         else:
             confirmed[i] = (name, describe(ref, agree, unverifiable))
 
+    def check_data(i: int, name: str, known: dict):
+        """(agreeing, contradicting) variables for game[i] read as `name`."""
+        agree, against = [], []
+        for key, base in sorted(data_bases(game[i], cands[i][name]), key=repr):
+            bases = known.get((game[i].segment, key), ())
+            if len(bases) == 1:
+                (agree if base in bases else against).append((key, base))
+        return agree, against
+
+    def data_pass() -> bool:
+        """Confirm functions whose data addresses single out one name."""
+        known = known_data([(game[i], name, cands[i][name]) for i, (name, _) in confirmed.items()])
+        taken = {name for name, _ in confirmed.values()}
+        picked = []
+        for i, found in enumerate(cands):
+            if i in confirmed or not found:
+                continue
+            verdict = {name: check_data(i, name, known) for name in found}
+            good = [name for name, (agree, against) in verdict.items() if agree and not against]
+            if len(good) != 1:
+                continue
+            name = good[0]
+            others = sorted(n for n in found if n != name)
+            if any(not verdict[n][1] for n in others):
+                continue  # another candidate name is not ruled out
+            agree_calls, unverifiable, problems = call_info[i, name]
+            ref = cands[i][name][0]
+            if problems or name in taken or ref.informative < MIN_DATA_INSTR or ref.listing:
+                continue
+            if any(not check_data(j, name, known)[1] for j in game_by_name[name] if j != i):
+                continue  # another game function fits this name as well
+            key, base = verdict[name][0][0]
+            text = (describe(ref, agree_calls, unverifiable)
+                    + f"; data: {len(verdict[name][0])} addresses agree with confirmed functions"
+                    + f" ({key[1] if key[0] == 'sym' else key[-1]} at {base:#010x})")
+            if others:
+                text += f"; data rules out {'/'.join(others)}"
+            picked.append((i, name, text))
+        for i, name, text in picked:
+            confirmed[i] = (name, text)
+            doubts.pop(i, None)
+        return bool(picked)
+
     # Pass 2: a confirmed function vouches for the functions it calls by name.
+    # Pass 3: data addresses. Repeat both until nothing new is confirmed.
     changed = True
     while changed:
         changed = False
@@ -350,13 +546,15 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
             name = wanted.pop()
             agree, unverifiable, problems = call_info[j, name]
             taken = any(n == name for n, _ in confirmed.values())
-            if problems or taken or len(game_by_name[name]) > 1:
+            if problems or taken or len(game_by_name[name]) > 1 or cands[j][name][0].listing:
                 continue
             caller = confirmed[min(i for _, i in requests)][0]
             confirmed[j] = (name, describe(cands[j][name][0], agree, unverifiable)
                             + f"; called as {name} by {caller}")
             doubts.pop(j, None)
             changed = True
+        if not changed:
+            changed = data_pass()
 
     # Final safety net: one name, one address.
     seen = defaultdict(list)
@@ -368,6 +566,16 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
                 del confirmed[i]
                 doubts[i] = [f"{name} was confirmed at {len(idxs)} addresses"]
 
+    # Say so when the data addresses speak against a candidate.
+    known = known_data([(game[i], name, cands[i][name]) for i, (name, _) in confirmed.items()])
+    for i, reasons in doubts.items():
+        for name in sorted(cands[i]):
+            against = check_data(i, name, known)[1]
+            if against:
+                key = against[0][0]
+                reasons.append(f"data: as {name}, {key[1] if key[0] == 'sym' else key[-1]} "
+                               f"would be at a different address than in confirmed functions")
+
     out = []
     for i, found in enumerate(cands):
         if i in confirmed:
@@ -377,6 +585,13 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
             out.append(Match(game[i], sorted(found), False, "; ".join(doubts[i]),
                              [r for rs in found.values() for r in rs]))
     return out
+
+
+def data_conflicts(matches: list) -> list:
+    """Variables that two confirmed functions of one segment place differently."""
+    known = known_data([(m.game, m.names[0], m.refs) for m in matches if m.confirmed])
+    return sorted((segment, key[1] if key[0] == "sym" else "/".join(key[1:]), sorted(bases))
+                  for (segment, key), bases in known.items() if len(bases) > 1)
 
 
 def describe(ref: RefFunc, agree: list, unverifiable: int) -> str:
@@ -425,7 +640,7 @@ def report(game: list, refs: list, matches: list, lists: dict) -> str:
     confirmed = [m for m in matches if m.confirmed]
     likely = [m for m in matches if not m.confirmed]
     sources = sorted({r.source for r in refs})
-    out.append(f"Reference: {len(refs)} functions from {', '.join(sources)}")
+    out.append(f"Reference: {len({r.name for r in refs})} function names from {', '.join(sources)}")
     out.append(f"Game: {len(game)} functions. Confirmed {len(confirmed)}, likely {len(likely)}, "
                f"no match {len(game) - len(matches)}.")
     if lists:
@@ -441,6 +656,11 @@ def report(game: list, refs: list, matches: list, lists: dict) -> str:
         out.append(f"  {seg:<10} {sum(m.game.segment == seg for m in confirmed):>4} / "
                    f"{sum(m.game.segment == seg for m in likely):>4} / "
                    f"{sum(g.segment == seg for g in game):>4}")
+    conflicts = data_conflicts(matches)
+    out.append("")
+    out.append(f"Data address conflicts between confirmed functions: {len(conflicts)}")
+    for segment, what, bases in conflicts:
+        out.append(f"   {segment:<8} {what} at {', '.join(f'{b:#010x}' for b in bases)}")
     listed = set().union(*lists.values()) if lists else set()
     out.append("")
     out.append("Confirmed (* = on a runtime list):")

@@ -4,8 +4,10 @@
 Everything lands in build/ref/ (git-ignored, never committed):
   build/ref/ultralib/   decompals/ultralib, the public libultra decompilation
   build/ref/N64Recomp/  only for src/symbol_lists.cpp (the runtime's function lists)
+  build/ref/ge007/      n64decomp/007, the public GoldenEye decompilation (second answer key)
   build/ref/ido/        IDO 5.3 from decompals/ido-static-recomp v1.2
   build/ref/obj/<variant>/<dir>/<file>.o   the compiled reference objects
+  build/ref/obj/<variant>/<dir>/<file>.s   GoldenEye's assembly files, copied as text
 
 No make, gcc, or MIPS binutils needed: IDO compiles both the C and the assembly
 files, and the fingerprint tool reads the .o files itself.
@@ -15,11 +17,19 @@ source (its version switches start at 2.0J), so this builds its oldest code,
 which is 2.0I, with the optimisation flags its Makefile lists for versions
 D to I. Functions that changed between D and I will simply not match.
 
+Second answer key: GoldenEye (same studio, 1997) ships libultra version G in
+src/libultra and Rare's modified files in src/libultrare. G is closer to D
+than I is. Its C files are compiled with IDO using the flags from its own
+Makefile.libultrare. Its assembly files are written for the GNU assembler,
+which we do not have, but every line carries the instruction's bytes in a
+comment, so they are copied as they are and the fingerprint tool reads the text.
+
 Usage:
   python3 tools/build_libultra_ref.py            # fetch what is missing, build
   python3 tools/build_libultra_ref.py --jobs 8
 """
 import argparse
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -35,6 +45,8 @@ ULTRALIB_URL = "https://github.com/decompals/ultralib"
 ULTRALIB_COMMIT = "e24c836796df4bf520ff8b11a5c9d2cea3a66cbd"
 N64RECOMP_URL = "https://github.com/N64Recomp/N64Recomp"
 N64RECOMP_COMMIT = "ffb39cdad1da5de07eaaa48bd1db4a89a7986771"
+GE007_URL = "https://github.com/n64decomp/007"
+GE007_COMMIT = "c4356466796c697dfd298010b9bed261f9ed8c6a"
 IDO_URL = ("https://github.com/decompals/ido-static-recomp/releases/download/"
            "v1.2/ido-5.3-recomp-linux.tar.gz")
 
@@ -62,6 +74,20 @@ GBI = {"gu/parse_gbi": ["-DF3D_GBI"], "sp/sprite": ["-DF3D_GBI"],
 # Versions J and below use the C matrix code, not these assembly files.
 SKIP = {"mgu/mtxcatf.s", "mgu/normalize.s", "mgu/scale.s", "mgu/translate.s"}
 SKIP_DIRS = {"voice"}  # needs a Shift-JIS conversion step; not in a 1996 game
+
+
+# GoldenEye: flags copied from its Makefile (VERSION=US) and
+# src/libultrare/Makefile.libultrare. Folder in the repo -> reference name.
+GE007_SOURCES = {"src/libultra": "ge007_libultra_G", "src/libultrare": "ge007_libultrare"}
+GE007_CFLAGS = ["-c", "-Wab,-r4300_mul", "-non_shared", "-G", "0", "-Xcpluscomm",
+                "-woff", "819,820,852,821,838,649",
+                "-I", ".", "-I", "include", "-I", "include/PR",
+                "-I", "src/libultrare", "-I", "src/libultra",
+                "-DVERSION_US", "-DLANG_US", "-DREFRESH_NTSC", "-DLEFTOVERDEBUG",
+                "-DLEFTOVERSPECTRUM", "-DBUGFIX_R0", "-DBYTEMATCH", "-DTARGET_N64"]
+GE007_O3_DIRS = {"audio", "gu", "libc"}
+GE007_MIPS3_O1 = {"src/libultra/libc/ll", "src/libultra/libc/llcvt"}
+GE007_KEEP_ASSERT = {"src/libultrare/audio/env"}
 
 
 def run(cmd, cwd=None):
@@ -130,6 +156,59 @@ def compile_one(job):
     return rel, r.returncode == 0 and out.exists(), r.stderr.strip()
 
 
+def ge007_flags(rel):
+    """Compiler flags for one GoldenEye library C file (path from the repo root)."""
+    key = rel.with_suffix("").as_posix()
+    top = rel.parts[2]
+    flags = list(GE007_CFLAGS)
+    if key not in GE007_KEEP_ASSERT:
+        flags.append("-DNDEBUG")
+    if top == "os":
+        flags.append("-D_FINALROM")
+    if key in GE007_MIPS3_O1:
+        return flags + ["-mips3", "-o32", "-O1"]
+    return flags + ["-mips2", "-32", "-O3" if top in GE007_O3_DIRS else "-O1"]
+
+
+def compile_ge007(job):
+    cc, root, rel, out = job
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = run([str(cc)] + ge007_flags(rel) + ["-o", str(out), rel.as_posix()], cwd=root)
+    return rel, r.returncode == 0 and out.exists(), r.stderr.strip()
+
+
+def build_ge007(args):
+    """Compile GoldenEye's library C files and copy its assembly files."""
+    root = REF / "ge007"
+    failed_all = []
+    for folder, variant in GE007_SOURCES.items():
+        base = root / folder
+        out_root = REF / "obj" / variant
+        c_files = sorted(p.relative_to(root) for p in base.rglob("*.c"))
+        jobs = [(REF / "ido" / "cc", root, rel,
+                 out_root / rel.relative_to(folder).with_suffix(".o")) for rel in c_files]
+        with ThreadPoolExecutor(args.jobs) as pool:
+            results = list(pool.map(compile_ge007, jobs))
+        failed = [(rel, err) for rel, ok, err in results if not ok]
+        asm = sorted(base.rglob("*.s"))
+        for path in asm:
+            dest = out_root / path.relative_to(base)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, dest)
+        print(f"{variant}: {len(results) - len(failed)} of {len(results)} files compiled, "
+              f"{len(asm)} assembly files copied")
+        failed_all += failed
+    return failed_all
+
+
+def report_failed(failed, verbose):
+    if failed:
+        print("  did not compile: " + " ".join(rel.as_posix() for rel, _ in failed))
+        if verbose:
+            for rel, err in failed:
+                print(f"--- {rel}\n{err[:600]}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--jobs", type=int, default=4)
@@ -138,6 +217,7 @@ def main():
 
     fetch_repo(ULTRALIB_URL, ULTRALIB_COMMIT, REF / "ultralib")
     fetch_repo(N64RECOMP_URL, N64RECOMP_COMMIT, REF / "N64Recomp")
+    fetch_repo(GE007_URL, GE007_COMMIT, REF / "ge007")
     fetch_ido(REF / "ido")
 
     src_root = REF / "ultralib" / "src"
@@ -155,11 +235,8 @@ def main():
             results = list(pool.map(compile_one, jobs))
         failed = [(rel, err) for rel, ok, err in results if not ok]
         print(f"{variant}: {len(results) - len(failed)} of {len(results)} files compiled")
-        if failed:
-            print("  did not compile: " + " ".join(rel.as_posix() for rel, _ in failed))
-            if args.verbose:
-                for rel, err in failed:
-                    print(f"--- {rel}\n{err[:600]}")
+        report_failed(failed, args.verbose)
+    report_failed(build_ge007(args), args.verbose)
     return 0
 
 

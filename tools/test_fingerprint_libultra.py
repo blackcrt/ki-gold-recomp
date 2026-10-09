@@ -56,11 +56,25 @@ FUNCS = {
     "shifty": (with_words(body(14, 12), {2: JAL}), [(2, "static", "helper2")]),
     "helper2": (body(15, 6), []),
     "padded": (body(16, 12), []),
+    # Data address traps. owner is big and unique, so it fixes where gCur and
+    # gNext live (it reads gNext + 4, to exercise offsets).
+    "owner": (with_words(body(20, 16), {3: LUI_AT, 4: LW_V0_AT, 6: LUI_AT, 7: LW_V0_AT | 4}),
+              [(3, "hi", "gCur"), (4, "lo", "gCur"), (6, "hi", "gNext"), (7, "lo", "gNext")]),
+    "getcur": (with_words(body(21, 12), {2: LUI_AT, 3: LW_V0_AT}), [(2, "hi", "gCur"), (3, "lo", "gCur")]),
+    "getnext": (with_words(body(21, 12), {2: LUI_AT, 3: LW_V0_AT}),   # same code as getcur
+                [(2, "hi", "gNext"), (3, "lo", "gNext")]),
+    "tinycur": (with_words(body(22, 6), {1: LUI_AT, 2: LW_V0_AT}), [(1, "hi", "gCur"), (2, "lo", "gCur")]),
+    "wrongdata": (with_words(body(23, 6), {1: LUI_AT, 2: LW_V0_AT}), [(1, "hi", "gNext"), (2, "lo", "gNext")]),
+    "odd1": (with_words(body(24, 12), {2: LUI_AT, 3: LW_V0_AT}), [(2, "hi", "gFoo"), (3, "lo", "gFoo")]),
+    "odd2": (with_words(body(24, 12), {2: LUI_AT, 3: LW_V0_AT}),      # same code as odd1
+             [(2, "hi", "gBar"), (3, "lo", "gBar")]),
+    "dupdata": (with_words(body(25, 6), {1: LUI_AT, 2: LW_V0_AT}), [(1, "hi", "gCur"), (2, "lo", "gCur")]),
 }
 STATIC = {"helper", "helper2"}
 OBJECTS = [["alpha", "helper"], ["tiny"], ["twin1"], ["twin2"], ["pair1"], ["pair2"],
            ["lonely_tiny"], ["dup"], ["changed"], ["jumper"], ["liar"], ["beta"], ["gamma"],
-           ["hermit"], ["shifty", "helper2"], ["padded"]]
+           ["hermit"], ["shifty", "helper2"], ["padded"], ["owner"], ["getcur"], ["getnext"],
+           ["tinycur"], ["wrongdata"], ["odd1"], ["odd2"], ["dupdata"]]
 RELOC_TYPE = {"call": 4, "static": 4, "hi": 5, "lo": 6}
 
 
@@ -121,7 +135,8 @@ LAYOUT = [
     ("main", 0x80001000, [("alpha", 0), ("helper", 0), ("tiny", 0), ("twin1", 0), ("lonely_tiny", 0),
                           ("dup", 0), ("dup", 0), ("changed", 0), ("jumper", 0), ("liar", 0),
                           ("beta", 0), ("gamma", 0), ("shifty", 0), ("decoy1", 0), ("helper2", 0),
-                          ("padded", 3), ("pair1", 0)]),
+                          ("padded", 3), ("pair1", 0), ("owner", 0), ("getcur", 0), ("getnext", 0),
+                          ("tinycur", 0), ("wrongdata", 0), ("odd1", 0), ("dupdata", 0), ("dupdata", 0)]),
     ("far", 0x80100000, [("decoy2", 0), ("decoy3", 0), ("decoy4", 0), ("decoy5", 0), ("hermit", 0),
                          ("decoy6", 0), ("decoy7", 0), ("decoy8", 0), ("decoy9", 0)]),
 ]
@@ -137,6 +152,7 @@ def link() -> tuple[list, dict]:
             where.setdefault(name, addr)
             addr += (len(FUNCS[name][0]) + pad) * 4
     where["gData"] = 0x80234568
+    where.update(gCur=0x80240010, gNext=0x80240020, gElsewhere=0x80250000, gFoo=0x80260000, gBar=0x80260008)
     game = []
     for segment, addr, name, pad in placed:
         words, relocs = FUNCS[name]
@@ -144,13 +160,15 @@ def link() -> tuple[list, dict]:
         for index, kind, target in relocs:
             if name == "liar":
                 target = "gamma"                       # trap: calls the wrong function
+            if name == "wrongdata":
+                target = "gElsewhere"                  # trap: reads a different variable
             dest = where[target]
             if kind in ("call", "static"):
                 words[index] |= (dest >> 2) & 0x03FFFFFF
             elif kind == "hi":
                 words[index] |= dest >> 16
             else:
-                words[index] |= dest & 0xFFFF
+                words[index] = words[index] & 0xFFFF0000 | (words[index] + dest) & 0xFFFF
         if name == "changed":
             words[4] ^= 0x1                            # trap: one instruction differs
         if name == "jumper":
@@ -177,6 +195,23 @@ dlabel func_80001010
 enddlabel func_80001010
 """
 
+REF_ASM = """\
+.section .text, "ax"
+glabel asmfunc
+/* 000100 70000100 3C088002 */  lui   $t0, %hi(gCur + 4) # $t0, 0x8002
+/* 000104 70000104 8D081234 */  lw    $t0, %lo(gCur + 4)($t0)
+/* 000108 70000108 0C001234 */  jal   outside
+/* 00010C 7000010C 00000000 */   nop
+/* 000110 70000110 0C000046 */  jal   inner
+/* 000114 70000114 3C09A430 */   lui   $t1, %hi(0xA430000C) # $t1, 0xa430
+glabel inner
+/* 000118 70000118 03E00008 */  jr    $ra
+/* 00011C 7000011C 00000000 */   nop
+
+.section .rodata
+/* 000200 70000200 DEADBEEF */ .word 0xDEADBEEF
+"""
+
 LISTS = """\
 const std::unordered_set<std::string> N64Recomp::reimplemented_funcs {
     // a comment with a "quoted" word
@@ -189,6 +224,12 @@ const std::unordered_set<std::string> N64Recomp::ignored_funcs {
     "beta", "hermit", "lonely_tiny",
 };
 """
+
+
+def listing(name: str, words: list) -> str:
+    """An assembly listing holding one function with these exact bytes."""
+    rows = [f"/* {k * 4:06X} {0x70000000 + k * 4:08X} {w:08X} */  nop" for k, w in enumerate(words)]
+    return "\n".join([".section .text", f"glabel {name}"] + rows) + "\n"
 
 
 def fails(data: bytes) -> bool:
@@ -222,6 +263,13 @@ def main() -> int:
     lines = fp.symbol_lines(matches)
     no_sizes = fp.read_object(make_object(["alpha", "helper"], sizes=False), "synth", "x.o")
     game_alpha = next(g for g in game if g.vram == where["alpha"])
+    asm_refs = fp.read_asm_reference(REF_ASM, "synth", "x.s")
+    asm_short = asm_refs[0]
+    # A listing that gives gamma's code a wrong label, and one that is the only
+    # reference for a decoy.
+    listed = (fp.read_asm_reference(listing("mislabelled", FUNCS["gamma"][0]), "synth", "a.s")
+              + fp.read_asm_reference(listing("listed_only", FUNCS["decoy3"][0]), "synth", "b.s"))
+    with_listing = {m.game.vram: m for m in fp.match_all(game, refs + listed)}
 
     checks = [
         ("object reader lists global functions only", "helper" not in by_name and "helper2" not in by_name
@@ -258,17 +306,48 @@ def main() -> int:
         ("a local call at the wrong distance blocks the name", likely("shifty", "different distance")),
         ("an isolated match stays unnamed", likely("hermit", "isolated")),
         ("trailing padding does not break a match", "padded" in confirmed),
+        ("object reader records address pairs with their offsets",
+         by_name["owner"].data == [(3, 4, ("sym", "gCur"), 0), (6, 7, ("sym", "gNext"), 4)]),
+        ("identical code is settled by data addresses, both ways",
+         "getcur" in confirmed and "getnext" in confirmed
+         and confirmed["getcur"].game.vram == where["getcur"]
+         and confirmed["getnext"].game.vram == where["getnext"]
+         and "data rules out getnext" in confirmed["getcur"].evidence),
+        ("a tiny function is confirmed when its data address agrees",
+         "tinycur" in confirmed and "gCur at 0x80240010" in confirmed["tinycur"].evidence),
+        ("a tiny function reading the wrong address stays unnamed",
+         likely("wrongdata", "only 6 instructions") and likely("wrongdata", "different address")),
+        ("identical code reading variables nobody confirmed stays unnamed",
+         likely("odd1", "several names") and likely("odd2", "several names")),
+        ("two game functions that both fit the data stay unnamed",
+         likely("dupdata", "2 game functions", 0) and likely("dupdata", "2 game functions", 1)),
+        ("confirmed functions agree on every data address", fp.data_conflicts(matches) == []),
+        ("assembly listing: every glabel is offered with every possible end",
+         [(f.name, len(f.words)) for f in asm_refs] == [("asmfunc", 6), ("asmfunc", 7), ("inner", 1)]),
+        ("assembly listing: address halves and jumps are blanked, data sections skipped",
+         asm_short.masks == [0xFFFF, 0xFFFF, 0x03FFFFFF, 0, 0x03FFFFFF, 0xFFFF]
+         and asm_short.words[0] == 0x3C088002),
+        ("assembly listing: named call, in-file call by distance, address pair with offset",
+         asm_short.calls == {2: ("sym", "outside"), 4: ("static", 0x18)}
+         and asm_short.data == [(0, 1, ("sym", "gCur"), 4)]),
+        ("a compiled object's name wins over a listing's label",
+         with_listing[where["gamma"]].confirmed and with_listing[where["gamma"]].names == ["gamma"]),
+        ("a match only a listing supports stays unnamed",
+         not with_listing[where["decoy3"]].confirmed
+         and with_listing[where["decoy3"]].names == ["listed_only"]
+         and "assembly listing" in with_listing[where["decoy3"]].evidence),
         ("exactly the expected names are confirmed",
-         sorted(confirmed) == ["alpha", "beta", "gamma", "padded", "tiny", "twin1"]),
+         sorted(confirmed) == ["alpha", "beta", "gamma", "getcur", "getnext", "owner", "padded",
+                               "tiny", "tinycur", "twin1"]),
         ("functions without a reference get no entry",
-         len(matches) == 13 and where["helper"] not in at and where["decoy2"] not in at),
+         len(matches) == 21 and where["helper"] not in at and where["decoy2"] not in at),
         ("runtime lists are parsed, comments ignored",
          lists == {"reimplemented_funcs": {"alpha", "tiny", "missing"},
                    "ignored_funcs": {"beta", "hermit", "lonely_tiny"}}),
         ("coverage counts confirmed, likely, and available names",
          rows == {"reimplemented_funcs": (3, 2, 2, 0), "ignored_funcs": (3, 3, 1, 2)}),
         ("symbol lines hold confirmed names with evidence, nothing else",
-         f"alpha = 0x{where['alpha']:08X}; // type:func" in lines and lines.count("// evidence: exact match") == 6
+         f"alpha = 0x{where['alpha']:08X}; // type:func" in lines and lines.count("// evidence: exact match") == 10
          and "hermit" not in lines and "liar" not in lines and "dup" not in lines),
         ("a higher size floor demotes mid-sized functions",
          "padded" not in {m.names[0] for m in fp.match_all(game, refs, min_instr=13) if m.confirmed}),

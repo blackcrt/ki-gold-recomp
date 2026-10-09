@@ -387,3 +387,39 @@ _loadOutputBuffer = 0x80041E54; // type:func
 alFxParam = 0x80042290; // type:func
 // evidence: exact match, 208 instr, ultralib_2.0I audio/reverb.o; 7 calls agree
 alFxPull = 0x800422A8; // type:func
+
+// libultra, second pass (see NOTES.md, 2026-10-08 session 3).
+// Second reference: n64decomp/007 (GoldenEye) libultra version G and Rare's libultrare, built with IDO 5.3.
+// "data:" means the name was settled by data addresses that confirmed functions agree on.
+// evidence: exact match, 87 instr, ge007_libultrare io/sptask.o; 11 calls agree
+osSpTaskLoad = 0x8000376C; // type:func
+// evidence: exact match, 16 instr, ge007_libultra_G io/vigetcurrframebuf.o; 2 calls agree; data: 1 addresses agree with confirmed functions (__osViCurr at 0x80007040); data rules out osViGetNextFramebuffer
+osViGetCurrentFramebuffer = 0x80003B30; // type:func
+// evidence: exact match, 16 instr, ge007_libultra_G io/vigetnextframebuf.o; 2 calls agree; data: 1 addresses agree with confirmed functions (__osViNext at 0x80007044); data rules out osViGetCurrentFramebuffer
+osViGetNextFramebuffer = 0x80003B70; // type:func
+// evidence: exact match, 6 instr, ge007_libultra_G os/getthreadpri.o; data: 1 addresses agree with confirmed functions (__osRunningThread at 0x80006fb0)
+osGetThreadPri = 0x80004B50; // type:func
+// evidence: exact match, 62 instr, ge007_libultrare os/destroythread.o; 3 calls agree, 1 could not be checked
+osDestroyThread = 0x80006320; // type:func
+// evidence: exact match, 272 instr, ge007_libultra_G gu/lookatref.o; 4 calls agree
+guLookAtReflectF = 0x80033A10; // type:func
+// evidence: exact match, 26 instr, ge007_libultrare io/conteepprobe.o; 3 calls agree
+osEepromProbe = 0x800365D0; // type:func
+// evidence: exact match, 45 instr, ge007_libultra_G gu/mtxutil.o
+guMtxL2F = 0x80037238; // type:func
+// evidence: exact match, 41 instr, ge007_libultrare io/aisetnextbuf.o; 2 calls agree
+osAiSetNextBuffer = 0x800398E0; // type:func
+// evidence: exact match, 61 instr, ge007_libultrare io/controller.o
+__osPackRequestData = 0x8003A33C; // type:func
+// evidence: exact match, 48 instr, ge007_libultrare io/contreaddata.o; 6 calls agree
+osContStartReadData = 0x8003A430; // type:func
+// evidence: exact match, 107 instr, ge007_libultrare io/conteepwrite.o; 9 calls agree
+osEepromWrite = 0x8003C7E0; // type:func
+// evidence: exact match, 136 instr, ge007_libultrare io/conteepwrite.o; 4 calls agree
+__osEepStatus = 0x8003CA9C; // type:func
+// evidence: exact match, 123 instr, ge007_libultrare io/conteepread.o; 9 calls agree
+osEepromRead = 0x8003CDA0; // type:func
+// evidence: exact match, 65 instr, ge007_libultrare io/conteepread.o
+__osPackEepReadData = 0x8003CF90; // type:func
+// evidence: exact match, 134 instr, ge007_libultrare audio/reverb.o
+alFxParamHdl = 0x80042078; // type:func
