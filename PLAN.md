@@ -38,7 +38,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 
 | Phase | Work | Gate to move on |
 | --- | --- | --- |
-| 0: Setup | Set up WSL (Ubuntu, Claude Code, git); add Visual Studio Build Tools and Ollama on Windows; clone the repo to `C:\src`; ROM checked and hash recorded | Guard blocks a test ROM; `romcheck` passes |
+| 0: Setup | Set up WSL (Ubuntu, Claude Code, git); add Visual Studio Build Tools on Windows; clone the repo to `C:\src`; ROM checked and hash recorded. The local model (Ollama) is deferred | Guard blocks a test ROM; `romcheck` passes |
 | 1: Recon | Scan for microcode and compression; splat split; identify libultra by fingerprinting against GoldenEye; generate the first symbol file | **Go/no-go:** microcode is supported by RT64 (or a plan exists for it) and the symbol file covers the whole game |
 | 2: First boot | Build N64Recomp and RSPRecomp; write the recomp config; set up the post-regen cleanup pipeline; build the port; chase crashes one at a time | Boots past the Rare logo to the title screen |
 | 3: Playable | Input, audio, saves, rumble; test every fighter, stage, and mode | Full arcade run with no crashes; versus mode works |
@@ -66,7 +66,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 ## AI workflow
 
 - **Claude Code (engineer):** runs the build, reads crash logs, traces them to a function, and fixes them with config changes, stubs, cleanup scripts, or patches.
-- **Local model (intern):** Ollama + Qwen2.5-Coder 14B on a local GPU. Suggest function names, summarize unfamiliar functions, draft notes.
+- **Local model (intern):** deferred. Claude Code does this work for now (suggest function names, summarize unfamiliar functions, draft notes). If added later: Ollama + Qwen2.5-Coder 14B on a local GPU.
 - **BlackCRT (director and playtester):** plays builds, describes what's broken, approves changes, decides what's next.
 - **Rule:** nothing merges unless the game still boots and the guard passes.
 
@@ -92,7 +92,7 @@ Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https:/
 | Visual Studio Build Tools 2022 (clang-cl, CMake, Ninja) | Build the Windows port (started from WSL via PowerShell) | 2 |
 | MIPS-capable clang + make | Build patches | 4 |
 | Claude Code | Main agent | All |
-| Ollama + Qwen2.5-Coder 14B | Local bulk worker | All |
+| Ollama + Qwen2.5-Coder 14B | Local bulk worker. Deferred; Claude Code does this work for now | Later, if needed |
 | ares or Mupen64Plus | Emulator to compare against the original | All |
 
 ## Working rhythm
@@ -112,7 +112,7 @@ Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https:/
 | Rare 1172 compression on code | Decompress before recompiling; GoldenEye's tools document the format |
 | Silent miscompiles (jump tables, overlapping functions, shared code tails) | WM2K's cleanup scripts are a ready-made map of what to check |
 | High refresh rate fights the engine | Ship everything else first; high refresh is last on purpose |
-| Claude usage limits | Pace sessions; push bulk work to the local model |
+| Claude usage limits | Pace sessions; the local model is deferred, so set it up if limits become a problem |
 | Burnout | Rhythm rules above |
 | Accidental commit of game data | `tools/guard.py` on every commit and in CI |
 
