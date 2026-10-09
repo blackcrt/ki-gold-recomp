@@ -2,6 +2,42 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: libultra fingerprint run on the game (session 2 of 2)
+
+**Done**
+- Ran `tools/fingerprint_libultra.py` against the ultralib 2.0I reference, both variants, over all four code segments (904 splat functions). Result: **185 confirmed, 48 likely, 671 no match.**
+
+| Segment | Confirmed | Likely | Functions | Verdict |
+| --- | --- | --- | --- | --- |
+| boot | 53 | 19 | 116 | confirmed: holds libultra (OS core, threads, messages, VI, SP, timers) |
+| stream1 | 132 | 28 | 459 | confirmed: holds libultra (audio library, gu maths, controller, AI, TLB) |
+| stream2 | 0 | 1 | 251 | no match (the one "likely" is a trivial stub that matches three names) |
+| stream3 | 0 | 0 | 78 | no match, but only the decoded half was checked |
+
+- Main score, confirmed names only: `reimplemented_funcs` **34 of 116** (7 more likely, 103 exist in the reference), `ignored_funcs` 66 of 358 (22 more likely, 287 in the reference), `renamed_funcs` 3 of 83.
+- **Variant:** `_FINALROM` (`ultralib_2.0I_rom`) fits better, by one function. The two variants agree on 184 functions; `__osTimerInterrupt` matches only the `_FINALROM` build. Nothing matches only the other build. So the game was built as a final ROM, as expected for a retail cartridge.
+- Wrote the 185 confirmed names to `disasm/symbol_addrs.txt`, each with its evidence comment. No address or name clashes with the 8 boot trace names. Re-ran the splat split: exit 0, no errors, still 904 functions, same confirmed count on a second fingerprint run.
+- The audio library (`al*`) and the `gu*` maths match version I almost completely. Those parts did not change between D and I.
+
+**Stuck / unknown**
+- **82 of 116 reimplemented functions are not confirmed.** 13 do not exist in the reference at all (voice, `__osInitialize_common`, and so on) and about 30 more are hardware this game may not use (flash, rumble, 64DD). The ones that matter and found no match at all:
+  - Start-up and managers: `osInitialize`, `osCreatePiManager`, `osCreateViManager`
+  - Cartridge reads: `osPiStartDma`, `osPiReadIo`, `osPiGetStatus`
+  - Controllers: `osContInit`, `osContStartReadData`
+  - Audio output: `osAiSetNextBuffer`, `osAiGetStatus`
+  - Graphics task: `osSpTaskLoad`
+  - Saves: `osEepromProbe`, `osEepromRead`, `osEepromWrite`, the long versions, and the `osPfs*` Controller Pak set (which of these the game uses is not known yet)
+  - Threads and timers: `osStopThread`, `osDestroyThread`, `osSetIntMask`, `osStopTimer`, `osSetTime`, `osGetMemSize`, `osViSetXScale`, `osViSetYScale`
+- Also unmatched from the ignored list: `__osException`, `__osDispatchThread`, `__osEnqueueAndYield`, `__osDevMgrMain`, `__osViInit`, `osYieldThread`. These are the OS core and sit in boot next to the confirmed functions.
+- A miss against version I does not mean a function is absent. The game is thought to be 2.0D (lead, not confirmed), and session 1 already expected functions that changed between D and I to miss. Not verified per function. Boot has 44 functions with no match and no likely; most of the missing OS core is probably among them.
+- 7 reimplemented names are likely but not named: `osSpTaskYield`, `osGetThreadPri`, `osAiGetLength`, `__osSetFpcCsr` (too short), `osViGetCurrentFramebuffer` / `osViGetNextFramebuffer` and `__ull_rem` / `__ll_rem` (two candidates each, identical code). The Pi and Si access queue functions are the same case. Comparing data addresses would settle most of these; the tool does not do that yet.
+- `memcpy`, `strlen`, and `strchr` each exist twice, once in boot and once in stream1, as do the access queue functions. That suggests boot and stream1 were linked separately, each with its own copy. Not investigated.
+- Stream3 is still only half decoded, so "no match" there is a floor, not a verdict.
+
+**Next**
+- Recommended: build the GoldenEye reference (`libultra` version G and `libultrare`) as a second folder under `build/ref/obj/`. The missing functions are the version-sensitive OS core, and G is closer to D than I is.
+- Cheap extra: teach the tool to compare data addresses, to settle the identical-code pairs.
+
 ## 2026-10-08: libultra fingerprint tool and reference build (session 1 of 2)
 
 **Done**

@@ -13,3 +13,377 @@ stream1_entry = 0x8000F960; // type:func
 stream1_main = 0x8000FAA0; // type:func
 stream2_entry = 0x801ACB20; // type:func segment:stream2
 stream3_entry = 0x801AD900; // type:func segment:stream3
+
+// libultra, confirmed by tools/fingerprint_libultra.py (see NOTES.md, 2026-10-08 session 2).
+// Reference: decompals/ultralib built as 2.0I with IDO 5.3. Original libultra names.
+// Each line carries its evidence. Only exact, unique matches are listed here.
+// evidence: exact match, 80 instr, ultralib_2.0I os/createthread.o; 2 calls agree
+osCreateThread = 0x800027C0; // type:func
+// evidence: exact match, 84 instr, ultralib_2.0I os/startthread.o; 7 calls agree, 2 could not be checked
+osStartThread = 0x80002910; // type:func
+// evidence: exact match, 55 instr, ultralib_2.0I os/setthreadpri.o; 4 calls agree, 1 could not be checked
+osSetThreadPri = 0x80002A60; // type:func
+// evidence: exact match, 38 instr, ultralib_2.0I libc/bzero.o
+_blkclr = 0x80002B80; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I os/invalicache.o
+osInvalICache = 0x80002C20; // type:func
+// evidence: exact match, 42 instr, ultralib_2.0I os/invaldcache.o
+osInvalDCache = 0x80002CA0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I os/createmesgqueue.o
+osCreateMesgQueue = 0x80002ED0; // type:func
+// evidence: exact match, 78 instr, ultralib_2.0I os/recvmesg.o; 5 calls agree, 1 could not be checked
+osRecvMesg = 0x80003010; // type:func
+// evidence: exact match, 25 instr, ultralib_2.0I os/seteventmesg.o; 2 calls agree
+osSetEventMesg = 0x80003550; // type:func
+// evidence: exact match, 26 instr, ultralib_2.0I io/visetevent.o; 2 calls agree
+osViSetEvent = 0x800035C0; // type:func
+// evidence: exact match, 15 instr, ultralib_2.0I io/sptask.o; 3 calls agree
+osSpTaskStartGo = 0x800038CC; // type:func
+// evidence: exact match, 83 instr, ultralib_2.0I os/sendmesg.o; 5 calls agree, 1 could not be checked
+osSendMesg = 0x80003910; // type:func
+// evidence: exact match, 31 instr, ultralib_2.0I io/sptaskyielded.o; 1 calls agree
+osSpTaskYielded = 0x80003A60; // type:func
+// evidence: exact match, 19 instr, ultralib_2.0I io/viswapbuf.o; 2 calls agree
+osViSwapBuffer = 0x80003AE0; // type:func
+// evidence: exact match, 41 instr, ultralib_2.0I io/dpsetnextbuf.o; 3 calls agree
+osDpSetNextBuffer = 0x80003BB0; // type:func
+// evidence: exact match, 25 instr, ultralib_2.0I io/visetmode.o; 2 calls agree
+osViSetMode = 0x80003C60; // type:func
+// evidence: exact match, 18 instr, ultralib_2.0I os/exceptasm.o
+__osEnqueueThread = 0x80004470; // type:func
+// evidence: exact match, 4 instr, ultralib_2.0I os/exceptasm.o; called as __osPopThread by osStartThread
+__osPopThread = 0x800044B8; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I os/writebackdcache.o
+osWritebackDCache = 0x80004610; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I os/maptlbrdb.o
+osMapTLBRdb = 0x80004690; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I io/pirawread.o
+osPiRawReadIo = 0x800046F0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I libc/ll.o
+__ull_rshift = 0x80004750; // type:func
+// evidence: exact match, 15 instr, ultralib_2.0I libc/ll.o
+__ull_div = 0x800047B8; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I libc/ll.o
+__ll_lshift = 0x800047F4; // type:func
+// evidence: exact match, 23 instr, ultralib_2.0I libc/ll.o
+__ll_div = 0x8000485C; // type:func
+// evidence: exact match, 12 instr, ultralib_2.0I libc/ll.o
+__ll_mul = 0x800048B8; // type:func
+// evidence: exact match, 23 instr, ultralib_2.0I libc/ll.o
+__ull_divremi = 0x800048E8; // type:func
+// evidence: exact match, 39 instr, ultralib_2.0I libc/ll.o
+__ll_mod = 0x80004948; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I libc/ll.o
+__ll_rshift = 0x800049E4; // type:func
+// evidence: exact match, 7 instr, ultralib_2.0I os/interrupt.o; called as __osDisableInt by osCreateThread
+__osDisableInt = 0x80004A10; // type:func
+// evidence: exact match, 6 instr, ultralib_2.0I os/interrupt.o; called as __osRestoreInt by osCreateThread
+__osRestoreInt = 0x80004A30; // type:func
+// evidence: exact match, 16 instr, ultralib_2.0I os/thread.o
+__osDequeueThread = 0x80004A50; // type:func
+// evidence: exact match, 56 instr, ultralib_2.0I io/pirawdma.o; 1 calls agree
+osPiRawStartDma = 0x80004B70; // type:func
+// evidence: exact match, 84 instr, ultralib_2.0I os/jammesg.o; 5 calls agree, 1 could not be checked
+osJamMesg = 0x80004DD0; // type:func
+// evidence: exact match, 9 instr, ultralib_2.0I io/pigetcmdq.o
+osPiGetCmdQueue = 0x80004F20; // type:func
+// evidence: exact match, 35 instr, ultralib_2.0I os/timerintr.o
+__osTimerServicesInit = 0x80004F50; // type:func
+// evidence: exact match, 93 instr, ultralib_2.0I_rom os/timerintr.o; 5 calls agree
+__osTimerInterrupt = 0x80004FDC; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I os/timerintr.o; 4 calls agree
+__osSetTimerIntr = 0x80005154; // type:func
+// evidence: exact match, 98 instr, ultralib_2.0I os/timerintr.o; 2 calls agree
+__osInsertTimer = 0x800051C8; // type:func
+// evidence: exact match, 215 instr, ultralib_2.0I io/viswapcontext.o; 3 calls agree
+__osViSwapContext = 0x80005490; // type:func
+// evidence: exact match, 2 instr, ultralib_2.0I os/getcount.o; called as osGetCount by __osTimerInterrupt
+osGetCount = 0x800057F0; // type:func
+// evidence: exact match, 3 instr, ultralib_2.0I io/spsetstat.o; called as __osSpSetStatus by osSpTaskStartGo
+__osSpSetStatus = 0x80005800; // type:func
+// evidence: exact match, 193 instr, ultralib_2.0I libc/bcopy.o
+_bcopy = 0x80005810; // type:func
+// evidence: exact match, 30 instr, ultralib_2.0I os/virtualtophysical.o; 1 calls agree
+osVirtualToPhysical = 0x80005B20; // type:func
+// evidence: exact match, 13 instr, ultralib_2.0I io/spsetpc.o
+__osSpSetPc = 0x80005BA0; // type:func
+// evidence: exact match, 34 instr, ultralib_2.0I io/sprawdma.o; 2 calls agree
+__osSpRawStartDma = 0x80005BE0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I io/sp.o
+__osSpDeviceBusy = 0x80005C70; // type:func
+// evidence: exact match, 3 instr, ultralib_2.0I io/spgetstat.o; called as __osSpGetStatus by osSpTaskYielded
+__osSpGetStatus = 0x80005CA0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I io/dp.o
+__osDpDeviceBusy = 0x80005CB0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I io/si.o
+__osSiDeviceBusy = 0x80005CE0; // type:func
+// evidence: exact match, 2 instr, ultralib_2.0I os/setcompare.o; called as __osSetCompare by __osTimerInterrupt
+__osSetCompare = 0x80006420; // type:func
+// evidence: exact match, 45 instr, ultralib_2.0I os/probetlb.o
+__osProbeTLB = 0x80006430; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I debug/atomic.o; 2 calls agree
+__osAtomicDec = 0x80006500; // type:func
+// evidence: exact match, 109 instr, ultralib_2.0I io/visetspecial.o; 2 calls agree
+osViSetSpecialFeatures = 0x80032AD0; // type:func
+// evidence: exact match, 139 instr, ultralib_2.0I gu/perspective.o; 3 calls agree
+guPerspectiveF = 0x80032C90; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I gu/perspective.o; 2 calls agree
+guPerspective = 0x80032EC0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I gu/random.o
+guRandom = 0x80032F20; // type:func
+// evidence: exact match, 45 instr, ultralib_2.0I gu/lookathil.o; 1 calls agree, 1 could not be checked
+guLookAtHilite = 0x800336BC; // type:func
+// evidence: exact match, 17 instr, ultralib_2.0I gu/translate.o; 1 calls agree
+guTranslateF = 0x80033780; // type:func
+// evidence: exact match, 20 instr, ultralib_2.0I gu/translate.o; 2 calls agree
+guTranslate = 0x800337C8; // type:func
+// evidence: exact match, 100 instr, ultralib_2.0I gu/rotate.o; 4 calls agree
+guRotateF = 0x80033820; // type:func
+// evidence: exact match, 29 instr, ultralib_2.0I gu/lookatref.o; 1 calls agree, 1 could not be checked
+guLookAtReflect = 0x80033E50; // type:func
+// evidence: exact match, 20 instr, ultralib_2.0I gu/scale.o; 1 calls agree
+guScaleF = 0x80033ED0; // type:func
+// evidence: exact match, 2 instr, ultralib_2.0I gu/sqrtf.o; called as sqrtf by guNormalize
+sqrtf = 0x80033F70; // type:func
+// evidence: exact match, 32 instr, ultralib_2.0I io/contquery.o; 5 calls agree, 1 could not be checked
+osContStartQuery = 0x80035BD0; // type:func
+// evidence: exact match, 9 instr, ultralib_2.0I io/contquery.o; 1 calls agree
+osContGetQuery = 0x80035C54; // type:func
+// evidence: exact match, 27 instr, ultralib_2.0I io/viblack.o; 2 calls agree
+osViBlack = 0x800368C0; // type:func
+// evidence: exact match, 111 instr, ultralib_2.0I gu/sinf.o
+sinf = 0x80036970; // type:func
+// evidence: exact match, 89 instr, ultralib_2.0I gu/cosf.o
+cosf = 0x80036B30; // type:func
+// evidence: exact match, 9 instr, ultralib_2.0I os/writebackdcacheall.o
+osWritebackDCacheAll = 0x80036CA0; // type:func
+// evidence: exact match, 83 instr, ultralib_2.0I gu/rotaterpy.o; 7 calls agree
+guRotateRPYF = 0x80036CD0; // type:func
+// evidence: exact match, 40 instr, ultralib_2.0I gu/mtxcatf.o
+guMtxXFMF = 0x80036E70; // type:func
+// evidence: exact match, 90 instr, ultralib_2.0I gu/mtxcatf.o
+guMtxCatF = 0x80036F10; // type:func
+// evidence: exact match, 63 instr, ultralib_2.0I gu/mtxutil.o
+guMtxF2L = 0x80037080; // type:func
+// evidence: exact match, 33 instr, ultralib_2.0I gu/mtxutil.o
+guMtxIdentF = 0x80037180; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I gu/mtxutil.o; 2 calls agree
+guMtxIdent = 0x80037208; // type:func
+// evidence: exact match, 14 instr, ultralib_2.0I os/unmaptlb.o
+osUnmapTLB = 0x800372F0; // type:func
+// evidence: exact match, 44 instr, ultralib_2.0I os/maptlb.o
+osMapTLB = 0x80037330; // type:func
+// evidence: exact match, 84 instr, ultralib_2.0I gu/ortho.o; 1 calls agree
+guOrthoF = 0x800373F0; // type:func
+// evidence: exact match, 13 instr, ultralib_2.0I audio/heapinit.o
+alHeapInit = 0x800375B0; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I audio/heapalloc.o
+alHeapDBAlloc = 0x800375F0; // type:func
+// evidence: exact match, 65 instr, ultralib_2.0I audio/bnkf.o; 2 calls agree
+alBnkfNew = 0x80037754; // type:func
+// evidence: exact match, 15 instr, ultralib_2.0I audio/bnkf.o
+alSeqFileNew = 0x80037858; // type:func
+// evidence: exact match, 27 instr, ultralib_2.0I audio/csplayer.o; 2 calls agree
+__CSPPostNextSeqEvent = 0x800378A0; // type:func
+// evidence: exact match, 91 instr, ultralib_2.0I audio/csplayer.o; 6 calls agree
+alCSPNew = 0x80038960; // type:func
+// evidence: exact match, 39 instr, ultralib_2.0I audio/cseq.o
+alCSeqGetLoc = 0x80038B80; // type:func
+// evidence: exact match, 39 instr, ultralib_2.0I audio/cseq.o
+alCSeqSetLoc = 0x80038C20; // type:func
+// evidence: exact match, 189 instr, ultralib_2.0I audio/cseq.o; 11 calls agree
+alCSeqNextEvent = 0x80038DE4; // type:func
+// evidence: exact match, 69 instr, ultralib_2.0I audio/cseq.o; 1 calls agree
+alCSeqNew = 0x800390DC; // type:func
+// evidence: exact match, 91 instr, ultralib_2.0I audio/cseq.o; 2 calls agree
+alCSeqNewMarker = 0x800391F0; // type:func
+// evidence: exact match, 62 instr, ultralib_2.0I audio/cseq.o
+alCSeqSecToTicks = 0x80039364; // type:func
+// evidence: exact match, 27 instr, ultralib_2.0I audio/cseq.o
+alCSeqTicksToSec = 0x80039460; // type:func
+// evidence: exact match, 89 instr, ultralib_2.0I audio/cseq.o
+__alCSeqNextDelta = 0x800394CC; // type:func
+// evidence: exact match, 88 instr, ultralib_2.0I io/aisetfreq.o
+osAiSetFrequency = 0x800396C0; // type:func
+// evidence: exact match, 11 instr, ultralib_2.0I audio/sl.o
+alUnlink = 0x80039820; // type:func
+// evidence: exact match, 9 instr, ultralib_2.0I audio/sl.o
+alLink = 0x80039850; // type:func
+// evidence: exact match, 13 instr, ultralib_2.0I audio/sl.o; 1 calls agree
+alClose = 0x80039874; // type:func
+// evidence: exact match, 12 instr, ultralib_2.0I audio/sl.o; 1 calls agree
+alInit = 0x800398AC; // type:func
+// evidence: exact match, 22 instr, ultralib_2.0I audio/synthesizer.o
+_timeToSamples = 0x800399A8; // type:func
+// evidence: exact match, 13 instr, ultralib_2.0I audio/synthesizer.o; 2 calls agree
+_freePVoice = 0x80039A00; // type:func
+// evidence: exact match, 24 instr, ultralib_2.0I audio/synthesizer.o; 2 calls agree
+_collectPVoices = 0x80039A38; // type:func
+// evidence: exact match, 6 instr, ultralib_2.0I audio/synthesizer.o; called as __freeParam by alEnvmixerPull
+__freeParam = 0x80039A98; // type:func
+// evidence: exact match, 12 instr, ultralib_2.0I audio/synthesizer.o
+__allocParam = 0x80039AB0; // type:func
+// evidence: exact match, 192 instr, ultralib_2.0I audio/synthesizer.o; 21 calls agree
+alSynNew = 0x80039D70; // type:func
+// evidence: exact match, 52 instr, ultralib_2.0I io/controller.o; called as __osContGetInitData by osContGetQuery
+__osContGetInitData = 0x8003A26C; // type:func
+// evidence: exact match, 42 instr, ultralib_2.0I io/contreaddata.o
+osContGetReadData = 0x8003A4F4; // type:func
+// evidence: exact match, 43 instr, ultralib_2.0I audio/event.o; 2 calls agree, 2 could not be checked
+alEvtqFlushType = 0x8003A690; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I audio/event.o; 2 calls agree, 2 could not be checked
+alEvtqFlush = 0x8003A73C; // type:func
+// evidence: exact match, 72 instr, ultralib_2.0I audio/event.o; 4 calls agree, 3 could not be checked
+alEvtqPostEvent = 0x8003A7AC; // type:func
+// evidence: exact match, 35 instr, ultralib_2.0I audio/event.o; 3 calls agree, 2 could not be checked
+alEvtqNextEvent = 0x8003A8D0; // type:func
+// evidence: exact match, 29 instr, ultralib_2.0I audio/event.o; 1 calls agree
+alEvtqNew = 0x8003A95C; // type:func
+// evidence: exact match, 19 instr, ultralib_2.0I audio/synaddplayer.o; 0 calls agree, 2 could not be checked
+alSynAddPlayer = 0x8003A9D0; // type:func
+// evidence: exact match, 57 instr, ultralib_2.0I audio/synallocvoice.o; 4 calls agree
+_allocatePVoice = 0x8003AA20; // type:func
+// evidence: exact match, 80 instr, ultralib_2.0I audio/synallocvoice.o; 3 calls agree
+alSynAllocVoice = 0x8003AB08; // type:func
+// evidence: exact match, 38 instr, ultralib_2.0I audio/synsetvol.o; 2 calls agree
+alSynSetVol = 0x8003AC50; // type:func
+// evidence: exact match, 34 instr, ultralib_2.0I audio/synstartvoice.o; 1 calls agree
+alSynStartVoice = 0x8003ACF0; // type:func
+// evidence: exact match, 32 instr, ultralib_2.0I audio/synsetpan.o; 1 calls agree
+alSynSetPan = 0x8003AD80; // type:func
+// evidence: exact match, 32 instr, ultralib_2.0I audio/synsetpitch.o; 1 calls agree
+alSynSetPitch = 0x8003AE10; // type:func
+// evidence: exact match, 36 instr, ultralib_2.0I audio/synsetfxmix.o; 1 calls agree
+alSynSetFXMix = 0x8003AEA0; // type:func
+// evidence: exact match, 29 instr, ultralib_2.0I audio/synstopvoice.o; 1 calls agree
+alSynStopVoice = 0x8003AF40; // type:func
+// evidence: exact match, 43 instr, ultralib_2.0I audio/synfreevoice.o; 2 calls agree
+alSynFreeVoice = 0x8003AFC0; // type:func
+// evidence: exact match, 20 instr, ultralib_2.0I audio/cents2ratio.o
+alCents2Ratio = 0x8003B070; // type:func
+// evidence: exact match, 32 instr, ultralib_2.0I gu/normalize.o; 1 calls agree
+guNormalize = 0x8003B0C0; // type:func
+// evidence: exact match, 42 instr, ultralib_2.0I io/sirawdma.o; 4 calls agree
+__osSiRawStartDma = 0x8003B210; // type:func
+// evidence: exact match, 52 instr, ultralib_2.0I os/settimer.o; 2 calls agree
+osSetTimer = 0x8003CCC0; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I audio/seqplayer.o
+__setInstChanState = 0x8003D0A0; // type:func
+// evidence: exact match, 32 instr, ultralib_2.0I audio/seqplayer.o
+__resetPerfChanState = 0x8003D0F4; // type:func
+// evidence: exact match, 45 instr, ultralib_2.0I audio/seqplayer.o; 4 calls agree
+__initFromBank = 0x8003D174; // type:func
+// evidence: exact match, 8 instr, ultralib_2.0I audio/seqplayer.o
+__vsDelta = 0x8003D230; // type:func
+// evidence: exact match, 34 instr, ultralib_2.0I audio/seqplayer.o
+__vsVol = 0x8003D254; // type:func
+// evidence: exact match, 75 instr, ultralib_2.0I audio/seqplayer.o; 5 calls agree
+__seqpReleaseVoice = 0x8003D2DC; // type:func
+// evidence: exact match, 41 instr, ultralib_2.0I audio/seqplayer.o; 2 calls agree
+__voiceNeedsNoteKill = 0x8003D408; // type:func
+// evidence: exact match, 27 instr, ultralib_2.0I audio/seqplayer.o
+__unmapVoice = 0x8003D4B0; // type:func
+// evidence: exact match, 54 instr, ultralib_2.0I audio/seqplayer.o; 4 calls agree
+__postNextSeqEvent = 0x8003D520; // type:func
+// evidence: exact match, 18 instr, ultralib_2.0I audio/seqplayer.o
+__vsPan = 0x8003D674; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I audio/seqplayer.o
+__lookupVoice = 0x8003D6BC; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I audio/seqplayer.o
+__mapVoice = 0x8003D730; // type:func
+// evidence: exact match, 62 instr, ultralib_2.0I audio/seqplayer.o
+__lookupSoundQuick = 0x8003D7A0; // type:func
+// evidence: exact match, 65 instr, ultralib_2.0I audio/seqplayer.o; 2 calls agree
+__seqpStopOsc = 0x8003E6E0; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I audio/seqplayer.o; 1 calls agree
+__initChanState = 0x8003E7E4; // type:func
+// evidence: exact match, 96 instr, ultralib_2.0I audio/seqplayer.o; 6 calls agree
+alSeqpNew = 0x8003E854; // type:func
+// evidence: exact match, 56 instr, ultralib_2.0I audio/synstartvoiceparam.o; 2 calls agree
+alSynStartVoiceParams = 0x8003E9E0; // type:func
+// evidence: exact match, 2 instr, ultralib_2.0I audio/syndelete.o; called as alSynDelete by alClose
+alSynDelete = 0x8003EAD0; // type:func
+// evidence: exact match, 12 instr, ultralib_2.0I io/ai.o
+__osAiDeviceBusy = 0x8003EAE0; // type:func
+// evidence: exact match, 16 instr, ultralib_2.0I audio/drvrnew.o; 1 calls agree
+alSaveNew = 0x8003EB10; // type:func
+// evidence: exact match, 20 instr, ultralib_2.0I audio/drvrnew.o; 1 calls agree
+alMainBusNew = 0x8003EB54; // type:func
+// evidence: exact match, 20 instr, ultralib_2.0I audio/drvrnew.o; 1 calls agree
+alAuxBusNew = 0x8003EBA8; // type:func
+// evidence: exact match, 33 instr, ultralib_2.0I audio/drvrnew.o; 2 calls agree
+alResampleNew = 0x8003EBFC; // type:func
+// evidence: exact match, 41 instr, ultralib_2.0I audio/drvrnew.o; 3 calls agree
+alLoadNew = 0x8003EC84; // type:func
+// evidence: exact match, 40 instr, ultralib_2.0I audio/drvrnew.o; 2 calls agree
+alEnvmixerNew = 0x8003ED2C; // type:func
+// evidence: exact match, 39 instr, ultralib_2.0I audio/drvrnew.o
+init_lpfilter = 0x8003EDD0; // type:func
+// evidence: exact match, 38 instr, ultralib_2.0I audio/synallocfx.o; 2 calls agree, 1 could not be checked
+alSynAllocFX = 0x8003F290; // type:func
+// evidence: exact match, 72 instr, ultralib_2.0I audio/mainbus.o
+alMainBusPull = 0x8003F360; // type:func
+// evidence: exact match, 116 instr, ultralib_2.0I audio/load.o; 1 calls agree
+alLoadParam = 0x8003F480; // type:func
+// evidence: exact match, 235 instr, ultralib_2.0I audio/load.o
+alRaw16Pull = 0x8003F654; // type:func
+// evidence: exact match, 296 instr, ultralib_2.0I audio/load.o; 3 calls agree
+alAdpcmPull = 0x8003FB2C; // type:func
+// evidence: exact match, 58 instr, ultralib_2.0I audio/resample.o
+alResampleParam = 0x8003FFD0; // type:func
+// evidence: exact match, 129 instr, ultralib_2.0I audio/resample.o; 1 calls agree
+alResamplePull = 0x800400BC; // type:func
+// evidence: exact match, 10 instr, ultralib_2.0I audio/env.o
+_ldexpf = 0x800402D0; // type:func
+// evidence: exact match, 58 instr, ultralib_2.0I audio/env.o
+_frexpf = 0x800402F8; // type:func
+// evidence: exact match, 55 instr, ultralib_2.0I audio/env.o
+alEnvmixerParam = 0x800403E4; // type:func
+// evidence: exact match, 338 instr, ultralib_2.0I audio/env.o; 8 calls agree
+alEnvmixerPull = 0x800409DC; // type:func
+// evidence: exact match, 54 instr, ultralib_2.0I audio/auxbus.o
+alAuxBusPull = 0x80040F60; // type:func
+// evidence: exact match, 13 instr, ultralib_2.0I audio/save.o
+alSaveParam = 0x80041040; // type:func
+// evidence: exact match, 34 instr, ultralib_2.0I audio/save.o
+alSavePull = 0x80041074; // type:func
+// evidence: exact match, 33 instr, ultralib_2.0I os/gettime.o; 3 calls agree
+osGetTime = 0x80041100; // type:func
+// evidence: exact match, 28 instr, ultralib_2.0I audio/copy.o
+alCopy = 0x80041190; // type:func
+// evidence: exact match, 44 instr, ultralib_2.0I io/crc.o
+__osContAddressCrc = 0x80041210; // type:func
+// evidence: exact match, 52 instr, ultralib_2.0I io/crc.o
+__osContDataCrc = 0x800412C0; // type:func
+// evidence: exact match, 7 instr, ultralib_2.0I audio/seq.o; called as alSeqSetLoc by __postNextSeqEvent
+alSeqSetLoc = 0x800413AC; // type:func
+// evidence: exact match, 96 instr, ultralib_2.0I audio/seq.o; 1 calls agree
+alSeqNextEvent = 0x80041424; // type:func
+// evidence: exact match, 72 instr, ultralib_2.0I audio/seq.o; 1 calls agree
+alSeqNewMarker = 0x800415A8; // type:func
+// evidence: exact match, 56 instr, ultralib_2.0I audio/seq.o
+alSeqSecToTicks = 0x800416C8; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I audio/seq.o
+alSeqTicksToSec = 0x800417AC; // type:func
+// evidence: exact match, 21 instr, ultralib_2.0I audio/seq.o; 1 calls agree
+__alSeqNextDelta = 0x80041800; // type:func
+// evidence: exact match, 53 instr, ultralib_2.0I audio/seq.o; 7 calls agree
+alSeqNew = 0x800418D8; // type:func
+// evidence: exact match, 4 instr, ultralib_2.0I audio/synsetpriority.o; called as alSynSetPriority by __seqpReleaseVoice
+alSynSetPriority = 0x800419B0; // type:func
+// evidence: exact match, 7 instr, ultralib_2.0I audio/filter.o; called as alFilterNew by alSaveNew
+alFilterNew = 0x800419C0; // type:func
+// evidence: exact match, 41 instr, ultralib_2.0I audio/reverb.o
+_doModFunc = 0x800419E0; // type:func
+// evidence: exact match, 45 instr, ultralib_2.0I audio/reverb.o; 2 calls agree
+_filterBuffer = 0x80041A88; // type:func
+// evidence: exact match, 98 instr, ultralib_2.0I audio/reverb.o; 3 calls agree
+_saveBuffer = 0x80041B40; // type:func
+// evidence: exact match, 99 instr, ultralib_2.0I audio/reverb.o; 3 calls agree
+_loadBuffer = 0x80041CC8; // type:func
+// evidence: exact match, 137 instr, ultralib_2.0I audio/reverb.o; 4 calls agree
+_loadOutputBuffer = 0x80041E54; // type:func
+// evidence: exact match, 6 instr, ultralib_2.0I audio/reverb.o; called as alFxParam by alSynAllocFX
+alFxParam = 0x80042290; // type:func
+// evidence: exact match, 208 instr, ultralib_2.0I audio/reverb.o; 7 calls agree
+alFxPull = 0x800422A8; // type:func
