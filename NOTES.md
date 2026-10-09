@@ -2,6 +2,27 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Phase 1 recon scan, game code is compressed
+
+**Done**
+- Extended `tools/scan_rom.py`: it now searches inside inflated 1172 streams for microcode strings, flags each stream as code or data by counting `jr ra` (the MIPS function return), and maps uncompressed code in 16 KB blocks.
+- Added `tools/test_scan_rom.py`, a known-answer test on a synthetic ROM (ground rule 4). 14/14 checks pass.
+- Scan results on the real ROM:
+  - 69 Rare 1172 streams, 1,747,450 bytes compressed, 3,480,440 inflated, from 0x0121F60 to 0x0BF90B0. No gzip.
+  - **Most game code is compressed.** Only 0x1000 to 0x9000 (32 KB, 118 `jr ra`) is uncompressed code, most likely the boot code that inflates the rest.
+  - Three streams hold code: 0x0A94D70 (239,520 bytes inflated, 548 `jr ra`), 0x0B00DF0 (154,048 bytes, 130 `jr ra`), and 0x0AB5870 (953,152 bytes, 270 `jr ra`, so code mixed with a lot of data). The other 66 streams are data.
+  - One microcode string, inside stream 0x0A94D70 near its end: an RSP software version 2.0D string dated April 1996. That is the original Fast3D generation, and it agrees with the libultra 2.0D value in the ROM header.
+  - Rough function count from `jr ra`: about 1,070 (118 uncompressed, 948 compressed).
+
+**Stuck / unknown**
+- Audio microcode: no ID string (normal, audio microcode usually has none). Needs another method.
+- The 2.0D string names the microcode generation, not the exact variant. Confirm when the game renders in RT64.
+- 0x9000 to 0x0121F60 (about 1.1 MB) is neither code nor 1172 streams. Unknown data so far.
+- Where each code stream loads in RAM. The boot code at 0x1000 should tell us.
+
+**Next**
+- Decide how to give N64Recomp uncompressed code: a tool that inflates the three code streams into a decompressed ROM. This comes before, or together with, the splat config.
+
 ## 2026-10-08: Phase 0 done
 
 **Done** (following `docs/SETUP.md` with the coach)
