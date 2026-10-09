@@ -2,6 +2,29 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: libultra fingerprint tool and reference build (session 1 of 2)
+
+**Done**
+- Added `tools/build_libultra_ref.py`. It fetches pinned copies of `decompals/ultralib` (the public libultra decompilation), N64Recomp (only for its function lists), and IDO 5.3 (ido-static-recomp v1.2) into `build/ref/`, then compiles every ultralib source file with the flags from ultralib's own Makefile. Result: 477 of 477 files compile, in two variants (`ultralib_2.0I_rom` with `_FINALROM`, `ultralib_2.0I` without), about 30 seconds. Nothing in `build/ref/` is committed.
+- **No apt install was needed.** IDO compiles the C and the assembly files, a Python script drives it instead of `make`, and the tool reads the object files itself.
+- Added `tools/fingerprint_libultra.py`. It reads the reference objects and splat's functions, blanks the link-time fields the object's relocations point at, and compares. A name is CONFIRMED only when the match is exact, unique both ways, at least 8 instructions, its calls agree with the reference, and it is not isolated. A tiny or ambiguous function can be confirmed only when a confirmed function calls it by that name. Everything else is LIKELY: reported, never named.
+- The main score is coverage of N64Recomp's lists, read straight from its `src/symbol_lists.cpp` (`reimplemented_funcs`, `ignored_funcs`, `renamed_funcs`).
+- `--symbols-out` writes proposed `symbol_addrs.txt` lines, each with an evidence comment, confirmed names only.
+- Added `tools/test_fingerprint_libultra.py`, a known-answer test on synthetic objects with ten traps (changed instruction, wrong call target, wrong opcode at a call, duplicate, ambiguous pair, tiny, isolated, and so on). 27/27 checks pass.
+- Checked the object reader on the real reference (not on the game): 641 distinct function names. The reference can supply 103 of the 116 `reimplemented_funcs` names and 287 of the 358 `ignored_funcs` names. Most gaps are things a 1996 game cannot have (voice, rumble, debugger internals).
+- **Not run on the game yet**, on purpose.
+
+**Stuck / unknown**
+- **ultralib has no real 2.0D.** Its version switches start at 2.0J, so the oldest code it holds is 2.0I. The build uses that with the flags its Makefile lists for versions D to I. Functions that changed between D and I will not match. The matching rules stay strict; we accept fewer matches.
+- GoldenEye's copy is version G, closer to D than ultralib's I, so the second reference matters more than expected. It is not built yet; the build script only handles ultralib so far.
+- `__osInitialize_common` is on the reimplemented list but is a 2.0J and later name; older libraries only have `osInitialize`.
+- 108 reference functions are under 8 instructions and can only be named through a confirmed caller.
+- The tool compares calls but not data addresses. Checking that two functions agree on a shared variable's address would be extra evidence for tiny functions; not built.
+
+**Next**
+- Session 2: run the tool on the game, review the LIKELY pile, write confirmed names into `disasm/symbol_addrs.txt`.
+- If coverage is thin, add GoldenEye's `libultra` (version G) and `libultrare` as a second reference folder under `build/ref/obj/`.
+
 ## 2026-10-08: splat config, first clean split
 
 **Done**
