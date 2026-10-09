@@ -62,7 +62,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 - [x] Generate a splat config in `disasm/` and get a clean split (`disasm/kigold.yaml`; the run is clean, but about half of stream3's code comes out as raw words and needs symbol work, see `NOTES.md`)
 - [x] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Done 2026-10-08 against ultralib 2.0I and GoldenEye's version G and `libultrare`: 219 exact matches, 54 of 116 `reimplemented_funcs` named (see `NOTES.md`). The fingerprint run is finished, the identification is not: the rest moves to the next line. The 2.0D lead is still not confirmed
 - [x] Identify remaining OS core functions by hand. Done 2026-10-08: start-up, Pi and Vi managers, and the exception handler group are named (see `NOTES.md`, sessions 4 and 5). 55 of 116 `reimplemented_funcs` named; the rest look absent from the game or are too small to prove
-- [ ] Generate the symbol file N64Recomp reads (`syms/`)
+- [x] Generate the symbol file N64Recomp reads (`syms/`). Done 2026-10-08: `tools/gen_symbols.py` writes `syms/dump.toml` (4 sections, 907 functions) and N64Recomp reads it without errors. Boot, stream1 and stream2 are fully covered; only 45% of stream3's code is in functions (see `NOTES.md`, session 7)
 - [ ] Go/no-go: write findings to `NOTES.md` and confirm the plan
 
 ## AI workflow

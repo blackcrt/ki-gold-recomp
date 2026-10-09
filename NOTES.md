@@ -2,6 +2,47 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Symbol file for N64Recomp (session 7)
+
+**Done**
+- **Split `stream1_rsp` into its six parts** in `disasm/kigold.yaml`: `rspboot`, `gfx_text`, `audio_text` (blobs), stream1's own data (now a `data` block, `asm/data/C34F90.data.s`), `gfx_data`, `audio_data` (blobs). Re-ran the split: exit 0, no warnings, same 907 functions (boot 119, stream1 459, stream2 251, stream3 78).
+- **Added `tools/gen_symbols.py`.** It reads the segment layout from `disasm/kigold.yaml` and the functions from splat's `.s` files, and writes `syms/dump.toml` in the layout WM2K uses: one `[[section]]` per code segment (`name`, `rom`, `vram`, `size` of the code part) with a `functions` list of `{ name, vram, size }`. Overlays are plain sections that share RAM addresses; WM2K's file has no relocation entries and neither does ours. The format was read from N64Recomp's parser (`src/config.cpp`), not from memory. Run: `disasm/.venv/bin/python tools/gen_symbols.py` (after a split).
+- The script refuses to write when something is off: a function outside its section, overlapping, or misaligned; a size that differs from the one splat prints; a name used twice; a function named in `symbol_addrs.txt` that is missing or at another address. On the real project all of these pass, including all 250 named functions.
+- **Added `tools/test_gen_symbols.py`**, a known-answer test on a made-up splat project. 18/18 checks pass.
+- **Result:**
+
+| Section | ROM | RAM | Code size | Functions | Named | Code inside functions |
+| --- | --- | --- | --- | --- | --- | --- |
+| boot | 0x1000 | 0x80000400 | 0x6160 | 119 | 89 | 98%, the rest is zero padding |
+| stream1 | 0xC00000 | 0x8000F960 | 0x32C90 | 459 | 159 | 100% (780 bytes of zero padding) |
+| stream2 | 0xC3A7A0 | 0x801ACB20 | 0x219E0 | 251 | 1 | 100% (104 bytes of zero padding) |
+| stream3 | 0xD232E0 | 0x801AD900 | 0x16760 | 78 | 1 | **45%** |
+
+- **Built N64Recomp** (commit ffb39cd) into `build/N64Recomp/build-linux/` (git-ignored). Ubuntu had no C++ tools and `sudo` needs a password, so the build uses pip packages in `~/.cache/kigold-toolchain` (`cmake`, `ninja`, and `ziglang`, whose bundled clang is the compiler, through four small wrapper scripts in that folder). Nothing was installed system-wide.
+- **Known-answer check:** ran N64Recomp with a throwaway config (`build/symtest/`, git-ignored) on the decompressed ROM and `syms/dump.toml`. **It reads the file without errors**: 4 sections, "Function count: 907", no parse or bounds complaints. No generated C was kept outside `build/`.
+- N64Recomp then stops at the first function it cannot translate. To see the whole picture I stubbed each such function in the throwaway config and reran (33 reruns). What it could not translate:
+  - **boot: 1.** `func_800064F0` reads CPU register 13 (Cause). This is the `__osGetCause` lead from session 5, still unnamed. The runtime does not recompile such OS internals; it needs its name or a stub.
+  - **stream1: 2.** `func_80011824` calls 0x801AE460, which is inside one of stream3's raw blocks, so no function exists there. `func_80030EF0` branches into the middle of the next function (to the entry label `func_80031028`).
+  - **stream2: 0.**
+  - **stream3: 29 of 78**, almost all "branching outside of the function", two reading CPU register 9 (Count). Then N64Recomp reached code it had discovered itself in a raw block (`static_3_801ADE74`), could not analyse it, and a function like that cannot be stubbed by name, so the loop ended there.
+
+**What the symbol file does not cover**
+- **Stream3's undecoded half:** 30 raw blocks, 50,160 bytes (55% of its code), with 71 entry labels inside them. None of it is in the file. Anything that calls in there fails, as `func_80011824` shows.
+- **Entry labels inside functions** (places code jumps into the middle of a function): boot 1, stream1 30, stream3 125. They are not functions in the file. Stream1's 30 sit in one area, 0x80031028 to 0x80032514. Session 1 of the split counted "71 extra entry labels" for stream3; that was only the ones in raw blocks, the real total is 196.
+- Function ends in stream3 are splat's guesses for hand-written code, which is why 29 of its 78 functions branch outside themselves.
+- No data symbols and no relocation entries (WM2K has none either).
+- The 61 libultra names still missing (session 5) are in the file as `func_...`; the runtime can only replace functions that carry their real names.
+
+**Stuck / unknown**
+- "Reads without errors" is as far as this check goes. Nothing was compiled or run; ground rule 1 still applies.
+- The stub loop stopped inside stream3, so there may be more untranslatable code after that point in stream3.
+- The toolchain in `~/.cache/kigold-toolchain` is a workaround. A normal install (`sudo apt install build-essential cmake ninja-build`) would replace it; BlackCRT's call.
+
+**Next**
+- Phase 1 go/no-go write-up. Microcode is a go; boot, stream1 and stream2 are in good shape (3 problem functions out of 829); **stream3 is the open problem** and needs a decision on how to tackle it.
+- Likely first Phase 2 symbol work: decode stream3 properly (real routine starts and ends, data tables between routines), then handle the entry labels the way WM2K does (`extra_funcs.txt` plus its cleanup scripts).
+- Cheap: name `__osGetCause` at 0x800064F0 (exact match, single candidate, from session 5).
+
 ## 2026-10-08: Microcode identified, graphics is stock Fast3D (session 6)
 
 **Result: go on microcode.** Both microcodes are stock Nintendo ones. Read-only analysis with throwaway scripts; no tool or config changes, no microcode bytes written anywhere.

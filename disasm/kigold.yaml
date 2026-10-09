@@ -71,9 +71,15 @@ segments:
     vram: 0x8000F960
     subsegments:
       - [0xC00000, asm]
-      # CPU code ends at about +0x32C90. The rest is RSP microcode (and
-      # possibly data); RSP code must not be disassembled as CPU code.
-      - [0xC32C90, bin, stream1_rsp]
+      # CPU code ends at +0x32C90. Then three blocks of RSP microcode code,
+      # stream1's own data, and the two microcode data blocks (see NOTES.md,
+      # session 6). RSP code must not be disassembled as CPU code.
+      - [0xC32C90, bin, rspboot]        # boot microcode, 0xD0
+      - [0xC32D60, bin, gfx_text]       # Fast3D code, 0x1410
+      - [0xC34170, bin, audio_text]     # audio microcode code, 0xE20
+      - [0xC34F90, data]                # stream1's own data, 0x4D50
+      - [0xC39CE0, bin, gfx_data]       # Fast3D data, 0x800
+      - [0xC3A4E0, bin, audio_data]     # audio microcode data, 0x2C0
 
   # stream2 and stream3 (table entries 1 and 2) are loaded later by stream1
   # into overlapping RAM, so each gets its own exclusive_ram_id and its own
