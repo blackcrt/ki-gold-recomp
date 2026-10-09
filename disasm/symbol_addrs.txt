@@ -499,3 +499,23 @@ __osViGetCurrentContext = 0x80005480; // type:func
 osSetIntMask = 0x800062C0; // type:func
 // evidence (by hand): 126 instr, not an exact match. Same 16 calls in the same order as osContInit in ge007_libultrare io/controller.o (125 instr); 124 instr the same kind, 111 identical
 osContInit = 0x8003A070; // type:func
+
+// libultra exception handler group and osAiGetLength, found by hand (see NOTES.md, 2026-10-08 session 5).
+// splat had merged the preamble, handle_CpU, and __osCleanupThread into their neighbours;
+// naming them here cuts those functions at the right address.
+// evidence (by hand): exact match (3 instr) with __osExceptionPreamble in ultralib_2.0I_rom os/exceptasm.o, once cut from the code after it. osInitialize copies it to the four exception vectors (0x80000000, 0x80000080, 0x80000100, 0x80000180), as the reference does
+__osExceptionPreamble = 0x80003DA0; // type:func
+// evidence (by hand): __osExceptionPreamble jumps here, and in the reference it jumps to __osException. 337 instr, not an exact match (version D). Calls send_mesg 15 times and jumps to __osDispatchThread
+__osException = 0x80003DB0; // type:func
+// evidence (by hand): exact match (44 instr) with send_mesg in ultralib_2.0I_rom os/exceptasm.o, once cut from handle_CpU after it. Called 15 times by __osException
+send_mesg = 0x800042F8; // type:func
+// evidence (by hand): exact match (13 instr) with handle_CpU in ultralib_2.0I_rom os/exceptasm.o. It follows send_mesg as in the reference, and __osException branches to it
+handle_CpU = 0x800043AC; // type:func
+// evidence (by hand): 5 confirmed functions (osRecvMesg, osSendMesg, osJamMesg, osStartThread, osSetThreadPri) call it where the reference calls __osEnqueueAndYield. 35 instr, not an exact match (version D); all 35 are the same kind as in ultralib_2.0I_rom, 34 identical. Saves registers to __osRunningThread (0x80006FB0), then jumps to __osDispatchThread
+__osEnqueueAndYield = 0x800043E0; // type:func
+// evidence (by hand): osStartThread and osDestroyThread call it where the reference calls __osDispatchThread, and __osEnqueueAndYield jumps to it. 80 instr, not an exact match (version D); calls __osPopThread
+__osDispatchThread = 0x800044C8; // type:func
+// evidence (by hand): exact match (2 instr: a call to osDestroyThread) with __osCleanupThread in ultralib_2.0I_rom os/exceptasm.o. osCreateThread stores this address where the reference stores the address of __osCleanupThread
+__osCleanupThread = 0x80004608; // type:func
+// evidence (by hand): exact match with osAiGetLength only (3 instr, returns the AI length register 0xA4500004; the register address is part of the match). Called twice by the game's audio code, once right after osAiSetNextBuffer
+osAiGetLength = 0x80039990; // type:func

@@ -2,6 +2,45 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Exception handler group and osAiGetLength (session 5)
+
+**Done**
+- Named the exception handler group by hand, 7 names, plus `osAiGetLength`. All 8 are in `disasm/symbol_addrs.txt` in their own block with evidence. No tool changes.
+
+| Name | Address | Evidence in short |
+| --- | --- | --- |
+| `__osExceptionPreamble` | 0x80003DA0 | Exact match (3 instr). `osInitialize` copies it to the four exception vectors |
+| `__osException` | 0x80003DB0 | The preamble jumps here. 337 instr, not exact (version D). Calls `send_mesg` 15 times |
+| `send_mesg` | 0x800042F8 | Exact match (44 instr). Called 15 times by `__osException` |
+| `handle_CpU` | 0x800043AC | Exact match (13 instr). Follows `send_mesg` as in the reference |
+| `__osEnqueueAndYield` | 0x800043E0 | 5 confirmed functions call it where the reference calls this name. 35 instr, not exact: 35 same kind, 34 identical |
+| `__osDispatchThread` | 0x800044C8 | `osStartThread` and `osDestroyThread` call it where the reference calls this name; `__osEnqueueAndYield` jumps to it. 80 instr, not exact |
+| `__osCleanupThread` | 0x80004608 | Exact match (2 instr). `osCreateThread` stores this address where the reference stores `&__osCleanupThread` |
+| `osAiGetLength` | 0x80039990 | Exact match, single candidate (3 instr); the match includes the AI length register address. Called by the game's audio code right after `osAiSetNextBuffer` |
+
+- **splat had merged three small pieces into their neighbours:** the preamble into `__osException`, `handle_CpU` into `send_mesg`, and `__osCleanupThread` into `__osDispatchThread`. That is why the fingerprint tool never matched them: cut at the right address, four of the seven are exact matches. Naming them makes splat cut there. The split now has **907 functions** (was 904), exit 0, no errors.
+- This also explains last session's lead that `send_mesg` matched "except two local jump distances": those two jumps were in the `handle_CpU` part.
+- Cross-check method (throwaway script): for every confirmed function, list each address it calls or points to and the name the reference uses there. Side result: 11 confirmed audio functions call 0x800062C0 as `osSetIntMask`, which independently backs that hand name from session 4.
+- Re-ran the fingerprint tool after the split: 221 exact matches (was 219; it now confirms `send_mesg` and `handle_CpU` by itself), 0 data conflicts, and nothing it confirms disagrees with the symbol file. Test still 43/43.
+- **Coverage, counted from the symbol file:** `reimplemented_funcs` **55 of 116** (was 54), `ignored_funcs` 111 of 358 (was 103), `renamed_funcs` 6 of 83. 250 function names in total.
+- Ticked "Identify remaining OS core functions by hand" in `PLAN.md`.
+
+**Stuck / unknown**
+- **`osYieldThread` is not in the decoded code.** It must call `__osEnqueueAndYield`, and that has exactly 5 callers, all confirmed as other functions. The game's `__osDevMgrMain` (version D) is also much shorter than later versions, which do call `osYieldThread`. Caveat: stream3 is half decoded, so this is "not found", not "proven absent".
+- `__osException` and `__osDispatchThread` differ from versions G and I and were not read line by line. Their names rest on who calls or jumps to them.
+- Leads seen in the cross-check, **not named** (outside this task):
+  - 0x80032F50 is called by confirmed `guLookAtHilite` as `guLookAtHiliteF` (no exact match).
+  - 0x8003EE70 is called by confirmed `alSynAllocFX` as `alFxNew` (no exact match).
+  - 0x8003F330 / 0x80040F30 are the identical pair `alMainBusParam` / `alAuxBusParam`; confirmed callers and stored pointers say which is which, but the tool refuses because both game functions match both names.
+  - 0x800413C8 is called as `alSeqGetTicks` by confirmed `__postNextSeqEvent`.
+  - 0x800064F0 is `__osGetCause` by exact match (2 instr), single candidate, 6 callers.
+- Still not found from the earlier list: `osPiReadIo`, `osPiGetStatus`, `osEPiRawStartDma`, `osStopThread`, `osViSetXScale`, `osViSetYScale`, `__ull_to_d`, `__ull_to_f`.
+
+**Next**
+- Phase 1 has two boxes left: "identify graphics and audio microcode" and "generate the symbol file N64Recomp reads (`syms/`)". The symbol file is the natural next step.
+- Optional and cheap: name the five leads above (the audio ones are not on the reimplemented list, so they do not block the recomp).
+- Before leaning on any "not in the game" verdict: finish decoding stream3.
+
 ## 2026-10-08: Callee rule, boot copies, and first hand-found OS functions (session 4)
 
 **Decisions (BlackCRT)**
