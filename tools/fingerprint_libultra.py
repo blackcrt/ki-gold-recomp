@@ -28,7 +28,14 @@ A tiny or ambiguous candidate can still be confirmed in two ways:
     in the game. A candidate name is accepted when the variables it reads sit
     at exactly those addresses, every other candidate name for the function is
     contradicted by them, and no other game function fits the name as well.
+    A call to a confirmed function counts the same way: for the name when the
+    reference calls that function there, against it when it calls another.
 Everything else is LIKELY: reported, never named.
+
+Copies: boot and stream1 are linked separately and each holds its own copy of
+some library functions. "Unique" is therefore judged inside one segment. When
+a name is confirmed once in each, the stream1 copy keeps the name and the boot
+copy gets the suffix in COPY_SUFFIX.
 
 References are ELF objects (.o) and, for GoldenEye, assembly listings (.s) that
 carry each instruction's bytes in a comment. A listing's labels were typed in
@@ -54,6 +61,7 @@ DEFAULT_LISTS = REPO / "build" / "ref" / "N64Recomp" / "src" / "symbol_lists.cpp
 
 MIN_INSTR = 8   # below this a fingerprint alone proves nothing
 MIN_DATA_INSTR = 3  # smallest function a data address match may name
+COPY_SUFFIX = {"1000": "_boot"}  # splat segment -> suffix for its copy of a duplicated name
 WINDOW = 3      # neighbour check: look this many functions each way
 
 # ELF constants
@@ -383,7 +391,8 @@ def known_data(named: list) -> dict:
     return known
 
 
-def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = WINDOW) -> list:
+def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = WINDOW,
+              copy_suffix: dict = COPY_SUFFIX) -> list:
     """Return one Match for every game function that has at least one candidate."""
     refs_by_len = defaultdict(list)
     for r in refs:
@@ -405,6 +414,10 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
     for i, found in enumerate(cands):
         for name in found:
             game_by_name[name].append(i)
+
+    def rivals(i: int, name: str) -> list:
+        """Other functions of the same segment that match this name."""
+        return [j for j in game_by_name[name] if j != i and game[j].segment == game[i].segment]
 
     starts = defaultdict(list)  # vram -> game indexes (overlays can share an address)
     for i, g in enumerate(game):
@@ -472,8 +485,8 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
         ref = found[name][0]
         if len(found) == 1:
             agree, unverifiable, problems = call_info[i, name]
-            if len(game_by_name[name]) > 1:
-                reasons.append(f"{len(game_by_name[name])} game functions match this name")
+            if rivals(i, name):
+                reasons.append(f"{len(rivals(i, name)) + 1} game functions match this name")
             if ref.informative < min_instr:
                 reasons.append(f"only {ref.informative} instructions")
             if ref.listing:
@@ -487,18 +500,30 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
             confirmed[i] = (name, describe(ref, agree, unverifiable))
 
     def check_data(i: int, name: str, known: dict):
-        """(agreeing, contradicting) variables for game[i] read as `name`."""
+        """(agreeing, contradicting) evidence for game[i] read as `name`.
+
+        Each item is (key, address): a variable and where the game has it, or
+        a function that confirmed code already named and where it is called.
+        """
         agree, against = [], []
         for key, base in sorted(data_bases(game[i], cands[i][name]), key=repr):
             bases = known.get((game[i].segment, key), ())
             if len(bases) == 1:
                 (agree if base in bases else against).append((key, base))
+        g = game[i]
+        for index, (kind, expected) in sorted(cands[i][name][0].calls.items()):
+            if kind != "sym":
+                continue
+            target = jump_target(g, index)
+            named = {confirmed[j][0] for j in callees(i, target) if j in confirmed}
+            if named:
+                (agree if expected in named else against).append((("call", expected), target))
         return agree, against
 
     def data_pass() -> bool:
         """Confirm functions whose data addresses single out one name."""
         known = known_data([(game[i], name, cands[i][name]) for i, (name, _) in confirmed.items()])
-        taken = {name for name, _ in confirmed.values()}
+        taken = {(game[i].segment, name) for i, (name, _) in confirmed.items()}
         picked = []
         for i, found in enumerate(cands):
             if i in confirmed or not found:
@@ -513,16 +538,23 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
                 continue  # another candidate name is not ruled out
             agree_calls, unverifiable, problems = call_info[i, name]
             ref = cands[i][name][0]
-            if problems or name in taken or ref.informative < MIN_DATA_INSTR or ref.listing:
+            if (problems or (game[i].segment, name) in taken
+                    or ref.informative < MIN_DATA_INSTR or ref.listing):
                 continue
-            if any(not check_data(j, name, known)[1] for j in game_by_name[name] if j != i):
+            if any(not check_data(j, name, known)[1] for j in rivals(i, name)):
                 continue  # another game function fits this name as well
-            key, base = verdict[name][0][0]
-            text = (describe(ref, agree_calls, unverifiable)
-                    + f"; data: {len(verdict[name][0])} addresses agree with confirmed functions"
-                    + f" ({key[1] if key[0] == 'sym' else key[-1]} at {base:#010x})")
+            data = [item for item in verdict[name][0] if item[0][0] != "call"]
+            called = [item for item in verdict[name][0] if item[0][0] == "call"]
+            text = describe(ref, agree_calls, unverifiable)
+            if data:
+                key, base = data[0]
+                text += (f"; data: {len(data)} addresses agree with confirmed functions"
+                         f" ({key[1] if key[0] == 'sym' else key[-1]} at {base:#010x})")
+            if called:
+                text += f"; calls confirmed {called[0][0][1]} at {called[0][1]:#010x}"
             if others:
-                text += f"; data rules out {'/'.join(others)}"
+                how = "data rules" if data else "that call rules"
+                text += f"; {how} out {'/'.join(others)}"
             picked.append((i, name, text))
         for i, name, text in picked:
             confirmed[i] = (name, text)
@@ -545,8 +577,9 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
                 continue
             name = wanted.pop()
             agree, unverifiable, problems = call_info[j, name]
-            taken = any(n == name for n, _ in confirmed.values())
-            if problems or taken or len(game_by_name[name]) > 1 or cands[j][name][0].listing:
+            taken = any(n == name and game[k].segment == game[j].segment
+                        for k, (n, _) in confirmed.items())
+            if problems or taken or rivals(j, name) or cands[j][name][0].listing:
                 continue
             caller = confirmed[min(i for _, i in requests)][0]
             confirmed[j] = (name, describe(cands[j][name][0], agree, unverifiable)
@@ -556,12 +589,22 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
         if not changed:
             changed = data_pass()
 
-    # Final safety net: one name, one address.
+    # Final safety net: one name, one address. The only exception is a copy
+    # in a segment that has a suffix, next to exactly one copy that has none.
     seen = defaultdict(list)
     for i, (name, _) in confirmed.items():
         seen[name].append(i)
+    suffix = {}  # game index -> suffix for its name
     for name, idxs in seen.items():
         if len(idxs) > 1:
+            plain = [i for i in idxs if game[i].segment not in copy_suffix]
+            copies = [i for i in idxs if game[i].segment in copy_suffix]
+            if len(plain) == 1 and len({game[i].segment for i in copies}) == len(copies):
+                for i in copies:
+                    suffix[i] = copy_suffix[game[i].segment]
+                    confirmed[i] = (name, confirmed[i][1] + f"; this segment's own copy, "
+                                    f"{name} itself is at {game[plain[0]].vram:#010x}")
+                continue
             for i in idxs:
                 del confirmed[i]
                 doubts[i] = [f"{name} was confirmed at {len(idxs)} addresses"]
@@ -571,7 +614,10 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
     for i, reasons in doubts.items():
         for name in sorted(cands[i]):
             against = check_data(i, name, known)[1]
-            if against:
+            if against and against[0][0][0] == "call":
+                reasons.append(f"as {name} it would call {against[0][0][1]}, "
+                               f"but that call goes to a function confirmed under another name")
+            elif against:
                 key = against[0][0]
                 reasons.append(f"data: as {name}, {key[1] if key[0] == 'sym' else key[-1]} "
                                f"would be at a different address than in confirmed functions")
@@ -580,7 +626,7 @@ def match_all(game: list, refs: list, min_instr: int = MIN_INSTR, window: int = 
     for i, found in enumerate(cands):
         if i in confirmed:
             name, evidence = confirmed[i]
-            out.append(Match(game[i], [name], True, evidence, found[name]))
+            out.append(Match(game[i], [name + suffix.get(i, "")], True, evidence, found[name]))
         elif found:
             out.append(Match(game[i], sorted(found), False, "; ".join(doubts[i]),
                              [r for rs in found.values() for r in rs]))

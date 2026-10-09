@@ -60,7 +60,8 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 - [x] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
 - [x] `python3 tools/unpack_rom.py`: build the decompressed ROM in `build/` (original ROM plus the three inflated code streams)
 - [x] Generate a splat config in `disasm/` and get a clean split (`disasm/kigold.yaml`; the run is clean, but about half of stream3's code comes out as raw words and needs symbol work, see `NOTES.md`)
-- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Lead, not confirmed: the `romcheck` header reports libultra 2.0D
+- [x] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Done 2026-10-08 against ultralib 2.0I and GoldenEye's version G and `libultrare`: 219 exact matches, 54 of 116 `reimplemented_funcs` named (see `NOTES.md`). The fingerprint run is finished, the identification is not: the rest moves to the next line. The 2.0D lead is still not confirmed
+- [ ] Identify remaining OS core functions by hand
 - [ ] Generate the symbol file N64Recomp reads (`syms/`)
 - [ ] Go/no-go: write findings to `NOTES.md` and confirm the plan
 

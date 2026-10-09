@@ -2,6 +2,62 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Callee rule, boot copies, and first hand-found OS functions (session 4)
+
+**Decisions (BlackCRT)**
+- Keep `osGetThreadPri`.
+- Duplicates: the stream1 copy keeps the standard name, the boot copy gets `_boot`.
+- Ticked the fingerprint box in `PLAN.md` with a note and added "Identify remaining OS core functions by hand".
+
+**Done**
+- `tools/fingerprint_libultra.py`, two new rules, test now 43/43:
+  - **Callee rule.** A call to a confirmed function counts like a data address: for a candidate name when the reference calls that function there, against it when the reference calls a different one. Same strictness as the data rule (one name fits, every other is contradicted, no rival in the segment).
+  - **Copies.** "Unique" is now judged inside one segment. A name confirmed once in boot and once in stream1 stays plain in stream1 and gets `_boot` in boot (`COPY_SUFFIX`). Two matches inside one segment are still refused.
+- Tool run on the game: **219 exact matches (was 201), 30 likely, 655 no match, 0 data conflicts.** All earlier names unchanged. 18 new:
+  - Callee rule: `osEepromLongRead` (0x80036780, calls `osEepromRead`) and `osEepromLongWrite` (0x80036640, calls `osEepromWrite`), `__osSiRawReadIo`, `__osSiRawWriteIo`, `guRotate`, `guScale`, `guRotateRPY`, `guOrtho`, `osSpTaskYield` (7 instructions, calls confirmed `__osSpSetStatus`).
+  - Copies: `memcpy`, `strlen`, `strchr` in stream1 and `memcpy_boot`, `strlen_boot`, `strchr_boot` in boot.
+  - Caller rule, now that it is per segment: `__osSiCreateAccessQueue`, `__osSiGetAccess`, `__osSiRelAccess` in stream1.
+- **The access queue functions are not duplicates.** Stream1's set is the Si set (called by `osContStartQuery`); boot's set is the Pi set (called by `osCreatePiManager`). So the only real duplicates are `memcpy`, `strlen`, `strchr`.
+- **Duplicates and the runtime lists:** `memcpy`, `strlen`, `strchr` are on `renamed_funcs` only. That list just renames a function so it does not clash with the PC's C library; the game's own code still runs. They are not on `reimplemented_funcs` or `ignored_funcs`, so the boot copies need no special handling, and `_boot` names cannot clash.
+- **Hand search**, with throwaway scripts (not committed): listed which named functions every unnamed function calls, compared that with the reference, then counted how many instructions are the same kind and how many are identical. 16 names added to `disasm/symbol_addrs.txt` in their own block, marked "by hand", each with its evidence. These are **not exact matches** unless the line says so.
+
+| Name | Address | Evidence in short |
+| --- | --- | --- |
+| `osInitialize` | 0x80002590 | Same 14 calls in order; 139 of 139 instr same kind, 126 identical (vs 2.0I final ROM); called first by the entry point |
+| `osCreatePiManager` | 0x80002D50 | Same 11 calls in order; 90 of 94 same kind |
+| `osPiStartDma` | 0x80002F00 | Same 4 calls in order; 65 of 65 same kind, 61 identical; called by `boot_rom_read` |
+| `osCreateViManager` | 0x800031F0 | Same 12 calls in order; 93 of 96 same kind |
+| `osContInit` | 0x8003A070 | Same 16 calls in order as Rare's version; 124 of 126 same kind, 111 identical |
+| `osSetIntMask` | 0x800062C0 | Older, shorter version: 23 of 23 same kind, 17 identical; touches the status register and the interrupt mask register; 19 callers in save/restore pairs |
+| `__osDevMgrMain` | 0x80004C50 | Thread entry that `osCreatePiManager` passes to `osCreateThread` |
+| `viMgrMain` | 0x80003374 | Thread entry that `osCreateViManager` passes to `osCreateThread` |
+| `__osViInit` | 0x80005350 | Called by `osCreateViManager` in the right place; calls `bzero` and `__osViSwapContext` |
+| `__osViGetCurrentContext` | 0x80005480 | Returns `__osViCurr` (0x80007040); called by `viMgrMain` |
+| `__osPiCreateAccessQueue`, `__osPiGetAccess`, `__osPiRelAccess` | 0x80004A90, 0x80004AE0, 0x80004B24 | Exact match with the Pi/Si pair; settled by the `osCreatePiManager` call and the shared queue at 0x8000F648 |
+| `__osGetSR`, `__osSetSR`, `__osSetFpcCsr` | 0x80003CE0, 0x80003CD0, 0x80003CF0 | Exact, single candidate; called by `osInitialize` in the reference's order |
+
+- **Coverage, counted from the symbol file:** `reimplemented_funcs` **54 of 116** (was 44), `ignored_funcs` 103 of 358 (was 79), `renamed_funcs` 6 of 83. 242 function names in total.
+- `osSetIntMask` at 23 instructions (39 in version I) and the much shorter `__osDevMgrMain` are the first direct evidence that this library is older than G, which fits the 2.0D lead.
+- Re-ran the splat split: exit 0, no errors, still 904 functions.
+
+**Stuck / unknown**
+- Of the 14 targets, 8 were **not found**:
+  - `osPiReadIo`: nothing calls the boot `__osPiGetAccess`, so no function has its call pattern. Probably not in the game.
+  - `osStopThread`, `osViSetXScale`, `osViSetYScale`: no unnamed function in boot or stream1 has their call pattern. Probably not in the game.
+  - `osEPiRawStartDma`: no candidate. It may not exist in version D at all (the EPi functions came later). Not verified.
+  - `osPiGetStatus`: 3 instructions, no calls, nothing to go on. The one 3-instruction candidate (0x80037650) is an empty stub, not this.
+  - `__ull_to_d`, `__ull_to_f`: tiny maths helpers with no calls and no data; no method finds them. Unknown.
+- "Not found" in boot and stream1 only. Stream2 and stream3 were not searched by hand, and stream3 is still half decoded.
+- Exception handler leads, seen but **not named** (outside this task): `0x80003DA0` (341 instr, calls `send_mesg` 15 times) looks like `__osException`; `0x800042F8` is `send_mesg`; `0x800043E0` (35 instr, 35 same kind and 34 identical against `__osEnqueueAndYield`); `0x800044C8` calls `__osPopThread` and `osDestroyThread`, so `__osDispatchThread` is in or near it. splat's function boundaries in this hand-written assembly may not match the reference's.
+- `osYieldThread` was not looked for.
+- The hand names rest on call order and instruction similarity, not exact matches. The running game is the final proof (ground rule 1).
+- Still likely, not named: `__ll_rem` / `__ull_rem` (identical code, two addresses), `osAiGetLength` (3 instructions), `__osGetCause`, the `alCSP*` / `alSeqp*` pairs.
+
+**Next**
+- "Identify remaining OS core functions by hand": the exception handler group above, then `osYieldThread`.
+- `osAiGetLength` (0x80039990) is called by the game's audio code next to `osAiSetNextBuffer`; a hand check would probably settle it.
+- Then the `syms/` file for N64Recomp.
+
 ## 2026-10-08: GoldenEye reference and data-address check (session 3)
 
 **Done**

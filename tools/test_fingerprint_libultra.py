@@ -69,12 +69,19 @@ FUNCS = {
     "odd2": (with_words(body(24, 12), {2: LUI_AT, 3: LW_V0_AT}),      # same code as odd1
              [(2, "hi", "gBar"), (3, "lo", "gBar")]),
     "dupdata": (with_words(body(25, 6), {1: LUI_AT, 2: LW_V0_AT}), [(1, "hi", "gCur"), (2, "lo", "gCur")]),
+    # Callee traps: same code, told apart only by which confirmed function is called.
+    "longread": (with_words(body(30, 12), {2: JAL}), [(2, "call", "beta")]),
+    "longwrite": (with_words(body(30, 12), {2: JAL}), [(2, "call", "gamma")]),
+    # Copy traps: one copy in each segment.
+    "shared": (body(31, 12), []),
+    "shared2": (body(32, 12), []),
 }
 STATIC = {"helper", "helper2"}
 OBJECTS = [["alpha", "helper"], ["tiny"], ["twin1"], ["twin2"], ["pair1"], ["pair2"],
            ["lonely_tiny"], ["dup"], ["changed"], ["jumper"], ["liar"], ["beta"], ["gamma"],
            ["hermit"], ["shifty", "helper2"], ["padded"], ["owner"], ["getcur"], ["getnext"],
-           ["tinycur"], ["wrongdata"], ["odd1"], ["odd2"], ["dupdata"]]
+           ["tinycur"], ["wrongdata"], ["odd1"], ["odd2"], ["dupdata"],
+           ["longread"], ["longwrite"], ["shared"], ["shared2"]]
 RELOC_TYPE = {"call": 4, "static": 4, "hi": 5, "lo": 6}
 
 
@@ -136,9 +143,11 @@ LAYOUT = [
                           ("dup", 0), ("dup", 0), ("changed", 0), ("jumper", 0), ("liar", 0),
                           ("beta", 0), ("gamma", 0), ("shifty", 0), ("decoy1", 0), ("helper2", 0),
                           ("padded", 3), ("pair1", 0), ("owner", 0), ("getcur", 0), ("getnext", 0),
-                          ("tinycur", 0), ("wrongdata", 0), ("odd1", 0), ("dupdata", 0), ("dupdata", 0)]),
+                          ("tinycur", 0), ("wrongdata", 0), ("odd1", 0), ("dupdata", 0), ("dupdata", 0),
+                          ("longread", 0), ("longwrite", 0), ("shared", 0), ("shared2", 0)]),
     ("far", 0x80100000, [("decoy2", 0), ("decoy3", 0), ("decoy4", 0), ("decoy5", 0), ("hermit", 0),
-                         ("decoy6", 0), ("decoy7", 0), ("decoy8", 0), ("decoy9", 0)]),
+                         ("decoy6", 0), ("decoy7", 0), ("decoy8", 0), ("decoy9", 0),
+                         ("shared", 0), ("shared2", 0)]),
 ]
 
 
@@ -270,6 +279,8 @@ def main() -> int:
     listed = (fp.read_asm_reference(listing("mislabelled", FUNCS["gamma"][0]), "synth", "a.s")
               + fp.read_asm_reference(listing("listed_only", FUNCS["decoy3"][0]), "synth", "b.s"))
     with_listing = {m.game.vram: m for m in fp.match_all(game, refs + listed)}
+    far_copy = next(g.vram for g in game if g.segment == "far" and g.words == FUNCS["shared"][0])
+    suffixed = {m.game.vram: m for m in fp.match_all(game, refs, copy_suffix={"far": "_far"})}
 
     checks = [
         ("object reader lists global functions only", "helper" not in by_name and "helper2" not in by_name
@@ -336,18 +347,32 @@ def main() -> int:
          not with_listing[where["decoy3"]].confirmed
          and with_listing[where["decoy3"]].names == ["listed_only"]
          and "assembly listing" in with_listing[where["decoy3"]].evidence),
+        ("identical code is settled by the confirmed function it calls",
+         "longread" in confirmed and "longwrite" in confirmed
+         and confirmed["longread"].game.vram == where["longread"]
+         and confirmed["longwrite"].game.vram == where["longwrite"]
+         and "calls confirmed beta" in confirmed["longread"].evidence
+         and "that call rules out longwrite" in confirmed["longread"].evidence),
+        ("one copy per segment stays unnamed when no suffix is set",
+         likely("shared", "confirmed at 2 addresses", 0) and likely("shared", "confirmed at 2 addresses", 1)),
+        ("with a suffix set, the plain copy keeps the name and the other gets the suffix",
+         suffixed[where["shared"]].confirmed and suffixed[where["shared"]].names == ["shared"]
+         and suffixed[far_copy].confirmed and suffixed[far_copy].names == ["shared_far"]
+         and "own copy" in suffixed[far_copy].evidence),
+        ("two matches in one segment are still refused when a suffix is set",
+         not any(m.confirmed for m in suffixed.values() if "dup" in m.names)),
         ("exactly the expected names are confirmed",
-         sorted(confirmed) == ["alpha", "beta", "gamma", "getcur", "getnext", "owner", "padded",
-                               "tiny", "tinycur", "twin1"]),
+         sorted(confirmed) == ["alpha", "beta", "gamma", "getcur", "getnext", "longread",
+                               "longwrite", "owner", "padded", "tiny", "tinycur", "twin1"]),
         ("functions without a reference get no entry",
-         len(matches) == 21 and where["helper"] not in at and where["decoy2"] not in at),
+         len(matches) == 27 and where["helper"] not in at and where["decoy2"] not in at),
         ("runtime lists are parsed, comments ignored",
          lists == {"reimplemented_funcs": {"alpha", "tiny", "missing"},
                    "ignored_funcs": {"beta", "hermit", "lonely_tiny"}}),
         ("coverage counts confirmed, likely, and available names",
          rows == {"reimplemented_funcs": (3, 2, 2, 0), "ignored_funcs": (3, 3, 1, 2)}),
         ("symbol lines hold confirmed names with evidence, nothing else",
-         f"alpha = 0x{where['alpha']:08X}; // type:func" in lines and lines.count("// evidence: exact match") == 10
+         f"alpha = 0x{where['alpha']:08X}; // type:func" in lines and lines.count("// evidence: exact match") == 12
          and "hermit" not in lines and "liar" not in lines and "dup" not in lines),
         ("a higher size floor demotes mid-sized functions",
          "padded" not in {m.names[0] for m in fp.match_all(game, refs, min_instr=13) if m.confirmed}),

@@ -423,3 +423,79 @@ osEepromRead = 0x8003CDA0; // type:func
 __osPackEepReadData = 0x8003CF90; // type:func
 // evidence: exact match, 134 instr, ge007_libultrare audio/reverb.o
 alFxParamHdl = 0x80042078; // type:func
+
+// libultra, third pass (see NOTES.md, 2026-10-08 session 4).
+// New rules: a call to a confirmed function can settle identical code, and a name confirmed once in
+// boot and once in stream1 keeps its name in stream1 and gets _boot in boot (each has its own copy).
+// evidence: exact match, 11 instr, ge007_libultra_G libc/string.o; this segment's own copy, memcpy itself is at 0x80033f80
+memcpy_boot = 0x80003150; // type:func
+// evidence: exact match, 10 instr, ge007_libultra_G libc/string.o; this segment's own copy, strlen itself is at 0x80033fac
+strlen_boot = 0x8000317C; // type:func
+// evidence: exact match, 15 instr, ge007_libultra_G libc/string.o; this segment's own copy, strchr itself is at 0x80033fd4
+strchr_boot = 0x800031A4; // type:func
+// evidence: exact match, 7 instr, ge007_libultra_G io/sptaskyield.o; 1 calls agree; calls confirmed __osSpSetStatus at 0x80005800
+osSpTaskYield = 0x80003630; // type:func
+// evidence: exact match, 19 instr, ge007_libultra_G io/sirawread.o; 1 calls agree; calls confirmed __osSiDeviceBusy at 0x80005ce0; that call rules out __osSpRawReadIo
+__osSiRawReadIo = 0x80003D00; // type:func
+// evidence: exact match, 18 instr, ge007_libultra_G io/sirawwrite.o; 1 calls agree; calls confirmed __osSiDeviceBusy at 0x80005ce0; that call rules out __osSpRawWriteIo
+__osSiRawWriteIo = 0x80003D50; // type:func
+// evidence: exact match, 19 instr, ge007_libultra_G gu/rotate.o; 2 calls agree; calls confirmed guRotateF at 0x80033820; that call rules out guAlign
+guRotate = 0x800339B4; // type:func
+// evidence: exact match, 17 instr, ge007_libultra_G gu/scale.o; 2 calls agree; calls confirmed guScaleF at 0x80033ed0; that call rules out guRotateRPY
+guScale = 0x80033F24; // type:func
+// evidence: exact match, 11 instr, ge007_libultra_G libc/string.o
+memcpy = 0x80033F80; // type:func
+// evidence: exact match, 10 instr, ge007_libultra_G libc/string.o
+strlen = 0x80033FAC; // type:func
+// evidence: exact match, 15 instr, ge007_libultra_G libc/string.o
+strchr = 0x80033FD4; // type:func
+// evidence: exact match, 78 instr, ge007_libultrare io/conteeplongwrite.o; 5 calls agree; calls confirmed osEepromWrite at 0x8003c7e0; that call rules out osEepromLongRead
+osEepromLongWrite = 0x80036640; // type:func
+// evidence: exact match, 78 instr, ge007_libultrare io/conteeplongread.o; 5 calls agree; calls confirmed osEepromRead at 0x8003cda0; that call rules out osEepromLongWrite
+osEepromLongRead = 0x80036780; // type:func
+// evidence: exact match, 17 instr, ultralib_2.0I gu/rotaterpy.o; 2 calls agree; calls confirmed guRotateRPYF at 0x80036cd0; that call rules out guScale
+guRotateRPY = 0x80036E1C; // type:func
+// evidence: exact match, 25 instr, ge007_libultra_G gu/ortho.o; 2 calls agree; calls confirmed guOrthoF at 0x800373f0; that call rules out guFrustum/guPosition
+guOrtho = 0x80037544; // type:func
+// evidence: exact match, 19 instr, ge007_libultra_G io/siacs.o; 2 calls agree; called as __osSiCreateAccessQueue by __osSiGetAccess
+__osSiCreateAccessQueue = 0x8003B150; // type:func
+// evidence: exact match, 16 instr, ge007_libultra_G io/siacs.o; 2 calls agree; called as __osSiGetAccess by osContStartQuery
+__osSiGetAccess = 0x8003B1A0; // type:func
+// evidence: exact match, 10 instr, ge007_libultra_G io/siacs.o; 1 calls agree; called as __osSiRelAccess by osContStartQuery
+__osSiRelAccess = 0x8003B1E4; // type:func
+
+// libultra, found by hand (see NOTES.md, 2026-10-08 session 4).
+// These are NOT exact matches unless the line says so. Each was read against the reference and
+// named from its confirmed callers and callees. Original libultra names.
+// evidence (by hand): 139 instr, not an exact match (version D). Makes the same 14 calls in the same order as osInitialize in ultralib_2.0I_rom os/initialize.o (162 instr); all 139 instr are the same kind, 126 identical. Called once, first thing, by the entry point 0x80000400
+osInitialize = 0x80002590; // type:func
+// evidence (by hand): 94 instr, not an exact match. Same 11 calls in the same order as osCreatePiManager in ge007_libultrare io/pimgr.o (97 instr); 90 instr the same kind, 65 identical
+osCreatePiManager = 0x80002D50; // type:func
+// evidence (by hand): 65 instr, not an exact match. Same 4 calls in the same order as osPiStartDma in ge007_libultra_G io/pidma.o (67 instr); all 65 instr the same kind, 61 identical. Called by boot_rom_read
+osPiStartDma = 0x80002F00; // type:func
+// evidence (by hand): 96 instr, not an exact match. Same 12 calls in the same order as osCreateViManager in ge007_libultrare io/vimgr.o (97 instr); 93 instr the same kind, 70 identical
+osCreateViManager = 0x800031F0; // type:func
+// evidence (by hand): osCreateViManager passes this address to osCreateThread as the thread entry, which is viMgrMain in the reference source (a file-local function there). Calls __osViSwapContext and __osTimerInterrupt
+viMgrMain = 0x80003374; // type:func
+// evidence (by hand): exact match with __osSetSR only (3 instr), and osInitialize calls it where the reference calls __osSetSR
+__osSetSR = 0x80003CD0; // type:func
+// evidence (by hand): exact match with __osGetSR only (2 instr), and osInitialize calls it where the reference calls __osGetSR
+__osGetSR = 0x80003CE0; // type:func
+// evidence (by hand): exact match with __osSetFpcCsr only (3 instr), and osInitialize calls it where the reference calls __osSetFpcCsr
+__osSetFpcCsr = 0x80003CF0; // type:func
+// evidence (by hand): exact match with the identical pair __osPiCreateAccessQueue/__osSiCreateAccessQueue (19 instr); osCreatePiManager calls it where the reference calls the Pi one
+__osPiCreateAccessQueue = 0x80004A90; // type:func
+// evidence (by hand): exact match with the identical pair __osPiGetAccess/__osSiGetAccess (16 instr); it calls __osPiCreateAccessQueue
+__osPiGetAccess = 0x80004AE0; // type:func
+// evidence (by hand): exact match with the identical pair __osPiRelAccess/__osSiRelAccess (10 instr); uses the same queue (0x8000F648) as __osPiCreateAccessQueue
+__osPiRelAccess = 0x80004B24; // type:func
+// evidence (by hand): osCreatePiManager passes this address to osCreateThread as the thread entry, which is __osDevMgrMain in the reference. 92 instr; the code is much shorter than versions G and I
+__osDevMgrMain = 0x80004C50; // type:func
+// evidence (by hand): osCreateViManager calls it between osCreateThread and osStartThread, where the reference calls __osViInit. Calls bzero and __osViSwapContext like the reference. 72 instr; the code differs from versions G and I
+__osViInit = 0x80005350; // type:func
+// evidence (by hand): 3 instr, returns the variable at 0x80007040, which osViGetCurrentFramebuffer proves is __osViCurr. viMgrMain calls it
+__osViGetCurrentContext = 0x80005480; // type:func
+// evidence (by hand): 23 instr, not an exact match (version D, older and shorter). All 23 instr are the same kind as in osSetIntMask in ultralib_2.0I os/setintmask.o (39 instr), 17 identical: reads the status register and MI_INTR_MASK_REG, looks up a 16-bit table, writes both back. 19 callers, in the audio code in save/restore pairs
+osSetIntMask = 0x800062C0; // type:func
+// evidence (by hand): 126 instr, not an exact match. Same 16 calls in the same order as osContInit in ge007_libultrare io/controller.o (125 instr); 124 instr the same kind, 111 identical
+osContInit = 0x8003A070; // type:func
