@@ -56,7 +56,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 
 ### Phase 1 checklist
 
-- [ ] `python3 tools/scan_rom.py`: identify graphics and audio microcode
+- [x] `python3 tools/scan_rom.py`: identify graphics and audio microcode. Done 2026-10-08: graphics is stock Fast3D (RT64 entry `F3D_SDK_E`, matched by hash on code and data, supported); audio is the standard Nintendo audio microcode (see `NOTES.md`, session 6)
 - [x] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
 - [x] `python3 tools/unpack_rom.py`: build the decompressed ROM in `build/` (original ROM plus the three inflated code streams)
 - [x] Generate a splat config in `disasm/` and get a clean split (`disasm/kigold.yaml`; the run is clean, but about half of stream3's code comes out as raw words and needs symbol work, see `NOTES.md`)
@@ -109,8 +109,8 @@ Adapted from finished recomp and decomp projects (WM2K, the [BFM decomp](https:/
 
 | Risk | Fallback |
 | --- | --- |
-| Custom graphics microcode RT64 doesn't support | Checked first in Phase 1; ask the RT64 community; scope as its own sub-project |
-| Custom audio microcode | Same; audio can come after first boot |
+| Custom graphics microcode RT64 doesn't support | **Cleared 2026-10-08:** stock Fast3D, in RT64's table as `F3D_SDK_E`. Still to prove by rendering in Phase 2 |
+| Custom audio microcode | **Cleared 2026-10-08:** standard Nintendo audio microcode. RSPRecomp run is still to do in Phase 2 |
 | Rare 1172 compression on code | Decompress before recompiling; GoldenEye's tools document the format |
 | Silent miscompiles (jump tables, overlapping functions, shared code tails) | WM2K's cleanup scripts are a ready-made map of what to check |
 | High refresh rate fights the engine | Ship everything else first; high refresh is last on purpose |

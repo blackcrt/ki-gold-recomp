@@ -2,6 +2,48 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Microcode identified, graphics is stock Fast3D (session 6)
+
+**Result: go on microcode.** Both microcodes are stock Nintendo ones. Read-only analysis with throwaway scripts; no tool or config changes, no microcode bytes written anywhere.
+
+**Done**
+- **Graphics microcode: stock Fast3D, RT64's `F3D_SDK_E`** ("2.0D, 04-01-96 (F3D SDK 2.0E)"). RT64 supports it; it runs on RT64's plain `F3D` path, the same one Super Mario 64 uses.
+- **Audio microcode: Nintendo's standard audio microcode** (the common `aspMain`, audio ABI 1). Not custom. RSPRecomp should handle it; that part is not tested until Phase 2.
+- **How RT64 detects microcode** (read from `src/gbi/rt64_gbi.cpp`, RT64 commit 8bd2cf1): it takes the microcode code and data addresses from the RSP task the game submits, hashes a fixed length of each with XXH3 (64 bit), and looks both up in a built-in table. Both must be found and must name the same entry; otherwise it prints "This game is not supported in HLE". It hashes emulator memory, where each 4-byte word is stored reversed.
+- **How graphics was identified:** parsed RT64's two tables (94 code rows, 105 data rows) and hashed every 8-byte-aligned offset in the tail of stream1 at every table length, in both byte orders. Exactly one hit each, both in the word-reversed order RT64 uses:
+
+| Part | RAM | Hash length | XXH3 | RT64 entry |
+| --- | --- | --- | --- | --- |
+| Graphics code | 0x800426C0 | 0x1408 | 0x9C0926F5E466BE70 | `F3D_SDK_E` |
+| Graphics data | 0x80049640 | 0x800 | 0xEEB10D73400213B3 | `F3D_SDK_E` |
+
+- **The game really submits those addresses.** The graphics task setup at 0x80011500 (stream1) fills a standard libultra `OSTask`: type 1, boot microcode 0x800425F0, code 0x800426C0, data 0x80049640, data size 0x800, stack size 0x400. A second graphics setup in stream2 (0x801AE890) uses the same code and data addresses. A third site at 0x800103D0 only uses the boot and code addresses. The earlier whole-ROM string scan found no second microcode ID string, so there is no sign of another graphics microcode; stream3's hand-written code is only half decoded, so that is not a full proof.
+- **How audio was identified:** the audio task setup at 0x8002AFD0 (stream1) uses boot 0x800425F0 (size 0xD0), code 0x80043AD0, data 0x80049E40. The open-source mupen64plus HLE audio plugin (`src/hle.c`) recognises audio microcode by three words of its data, and all three match: data+0x00 is 1, data+0x30 is 0xF0000F00, and data+0x28 is 0x1E24138C, which that source labels "audio ABI (most common)". GoldenEye's value (0x1DC8138C) and the Blast Corps / Diddy Kong Racing value (0x1E3C1390) are different, so KI Gold does **not** use Rare's modified audio microcode. The data also holds the usual 16-entry command table at data+0x10.
+- **Layout of the `stream1_rsp` area** (stream1 is at 0xC00000 in the decompressed ROM, RAM 0x8000F960):
+
+| Part | RAM | stream1 offset | Size | SHA1 |
+| --- | --- | --- | --- | --- |
+| Boot microcode (`rspboot`) | 0x800425F0 | +0x32C90 | 0xD0 | f17bd9a73dade5739249a3aca6fb69830f9d903c |
+| Graphics code | 0x800426C0 | +0x32D60 | 0x1410 | 06fccd9882519deede2dc95178df101fab81888e |
+| Audio code | 0x80043AD0 | +0x34170 | 0xE20 | 21e05bb9b4b3611e0cc2374c3ad6cc26adf2b385 |
+| stream1's own data | 0x800448F0 | +0x34F90 | 0x4D50 | not hashed |
+| Graphics data | 0x80049640 | +0x39CE0 | 0x800 | fbb95b2f4e229b7dd59a104f70e1ff4b4522652c |
+| Audio data | 0x80049E40 | +0x3A4E0 | 0x2C0 | 41dde0cb13c346f64b3aa429195741438f3a5292 |
+
+- So stream1's CPU code ends exactly at +0x32C90, the three microcode code blocks follow, and stream1's own data starts at +0x34F90 (the lowest data address the code refers to). The "RSP SW Version: 2.0D" string sits at graphics data + 0x270.
+- What RSPRecomp needs (read from `RSPRecomp/src/rsp_recomp.cpp`): `text_offset`, `text_size`, `text_address`, `rom_file_path`, `output_file_path`, `output_function_name`, and `extra_indirect_branch_targets`. For us: offset 0xC34170 in the decompressed ROM, size 0xE20. The branch targets are the 16 entries of the command table at audio data + 0x10; read them when writing the config.
+
+**Stuck / unknown**
+- RT64 marks its `F3D_SDK_E` rows "Needs confirmation". The hashes match exactly, so detection will succeed; ground rule 1 still applies, the running game is the proof.
+- Audio code size 0xE20 is measured (code start to the first stream1 data reference), not taken from a reference. The audio code's RSP address (expected 0x04001080) is not checked; confirm both in Phase 2.
+- The audio "standard" verdict rests on the three marker words and the layout, not a byte comparison with a reference copy (we have no legal reference copy of the microcode).
+- The audio task's type field was not traced back to its value; the site is identified by its microcode pointers.
+- Not checked: whether the game uses unusual display list tricks on top of stock Fast3D. Only rendering will show that.
+
+**Next**
+- Last Phase 1 box before go/no-go: generate the symbol file N64Recomp reads (`syms/`).
+- Optional tidy-up: split `stream1_rsp` in `disasm/kigold.yaml` into the six parts above, so stream1's data is no longer inside a microcode blob.
+
 ## 2026-10-08: Exception handler group and osAiGetLength (session 5)
 
 **Done**
