@@ -139,3 +139,4 @@ Other rules: dump your own cartridge before going public, free forever, labeled 
 | 2026-10-08 | Hybrid setup: Ubuntu in WSL as home base, Windows build tools only for the game `.exe`, repo on `C:\src`. No Docker |
 | 2026-10-08 | Coach relay workflow: claude.ai chat coaches, BlackCRT relays to and from Claude Code |
 | 2026-10-08 | Ollama (local model) skipped on purpose. Claude Code does that work instead; revisit only if usage limits become a problem |
+| 2026-10-08 | Decompressed ROM layout: keep the original 12 MB unchanged and append the three inflated code streams after it (from 0xC00000). The game still reads its data streams from their original offsets, so nothing else moves. Built by `tools/unpack_rom.py`, never committed |
