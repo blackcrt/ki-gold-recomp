@@ -37,6 +37,7 @@ disasm/.venv/
 disasm/asm/
 disasm/assets/
 disasm/build/
+disasm/include/
 disasm/*.ld
 disasm/undefined_funcs_auto.txt
 disasm/undefined_syms_auto.txt

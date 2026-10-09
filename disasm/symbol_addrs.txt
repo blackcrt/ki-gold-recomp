@@ -1,0 +1,15 @@
+// Symbols for the splat config (kigold.yaml).
+// Only addresses proven by the boot trace (see NOTES.md, 2026-10-08).
+// Names describe what the trace showed; they are ours, not original names.
+
+// Boot code
+boot_main = 0x80000520; // type:func
+boot_rom_read = 0x80000740; // type:func
+boot_inflate = 0x80000900; // type:func
+stream_table = 0x800071E0;
+
+// Stream entry points
+stream1_entry = 0x8000F960; // type:func
+stream1_main = 0x8000FAA0; // type:func
+stream2_entry = 0x801ACB20; // type:func segment:stream2
+stream3_entry = 0x801AD900; // type:func segment:stream3

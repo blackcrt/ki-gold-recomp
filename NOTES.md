@@ -2,6 +2,35 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: splat config, first clean split
+
+**Done**
+- Added `disasm/kigold.yaml` (splat 0.50.0) and `disasm/symbol_addrs.txt`. Input is `build/kigold.decompressed.z64`; the config carries its SHA1 so splat refuses any other file. Run: `cd disasm && .venv/bin/python -m splat split kigold.yaml`.
+- Segments: header, ipl3 (blob), boot (code 0x1000 to 0x7160, data to 0x7EC0, plus its 0x8690 bytes of variables), `rom_data` (blob, 0x7EC0 to 0xC00000), stream1 (code to +0x32C90, then the `stream1_rsp` blob), stream2 and stream3 as overlays with their own `exclusive_ram_id` and symbol names ending in `_stream2` / `_stream3`. Code ends for boot, stream2, and stream3 were confirmed by a block scan before writing the config.
+- `symbol_addrs.txt` holds 8 names, all from the boot trace (our names, not original ones).
+- The split runs clean: exit 0, no errors. The only messages are file-split and rodata hints.
+- Added `disasm/include/` to `.gitignore` (splat writes a generated `macro.inc` there).
+
+| Segment | splat functions | `jr ra` count | Why they differ |
+| --- | --- | --- | --- |
+| boot | 116 | 118 | 6 functions have two `jr ra`; 4 have none |
+| stream1 | 459 | 535 | 36 functions have more than one `jr ra` (77 extra), 1 has none |
+| stream2 | 251 | 270 | 7 functions have more than one `jr ra` (19 extra) |
+| stream3 | 78 | 130 | see below |
+
+- In boot, stream1, and stream2 every `jr ra` is inside a function and every word decodes. splat's counts are the better function counts: 826 for those three.
+
+**Stuck / unknown**
+- **Stream3 is only about half disassembled.** splat gave up on 30 blocks and wrote them as raw words: 12,540 words, about 50 KB of the 92 KB code area. Those blocks hold 74 of the 130 `jr ra`. 249 of the words are not valid instructions, which fits the data tables between routines seen earlier; one bad word makes splat drop the whole block. The largest "function" is 42 KB, clearly many routines glued together.
+- In the half that did decode: 78 functions, 71 extra entry labels (jumps into the middle of a function), and 28 functions with no `jr ra`. So the real stream3 routine count is unknown; 78 is a floor.
+- Stream1 has a few functions with many returns (one has 15, two have 8). Could be hand-written or switch-style code; not looked at.
+- The tail of stream1 (`stream1_rsp`, 31.5 KB) is treated as one blob. It holds the microcode, and stream1's own data may be in there too; not separated yet.
+- splat's rodata hints (jump tables at 0x7D30, 0xD20380, 0xD3AC84) are not applied; data is one block per segment for now.
+
+**Next**
+- Stream3 needs manual work before N64Recomp can use it: mark the data tables inside the code and add routine starts to `symbol_addrs.txt`.
+- libultra fingerprinting (boot and stream1 first; splat's file-split hints in boot look like libultra file edges).
+
 ## 2026-10-08: Unpacker tool, decompressed ROM builds
 
 **Done**

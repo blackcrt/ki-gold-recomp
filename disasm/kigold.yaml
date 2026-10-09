@@ -1,0 +1,101 @@
+# splat config for Killer Instinct Gold (US V1.2).
+#
+# Input is the DECOMPRESSED ROM that tools/unpack_rom.py builds, not the
+# original ROM: the original 12 MB unchanged, then the three inflated code
+# streams. Segment addresses come from build/unpack_layout.toml. If the
+# unpacker's layout ever changes, update the stream offsets here to match.
+#
+# Run from the repo root:
+#   cd disasm && .venv/bin/python -m splat split kigold.yaml
+#
+# Output (asm/, assets/, *.ld, *_auto.txt) is git-ignored and never committed.
+
+name: Killer Instinct Gold (US V1.2, decompressed)
+# SHA1 of build/kigold.decompressed.z64, so splat refuses any other file.
+sha1: c23656718445289fcf20f3bb2abf37ec1cb9fb15
+
+options:
+  basename: kigold
+  target_path: ../build/kigold.decompressed.z64
+  base_path: .
+  platform: n64
+  compiler: IDO
+
+  asm_path: asm
+  asset_path: assets
+  build_path: build
+  cache_path: .splat_cache
+  ld_script_path: kigold.ld
+  symbol_addrs_path: symbol_addrs.txt
+  undefined_funcs_auto_path: undefined_funcs_auto.txt
+  undefined_syms_auto_path: undefined_syms_auto.txt
+
+  # Disassembly only: no C files, this is not a matching decomp.
+  create_c_files: False
+  do_c_func_detection: False
+  find_file_boundaries: True
+  # The boot code talks to N64 hardware; name the registers.
+  hardware_regs: True
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: ipl3
+    type: bin
+    start: 0x40
+
+  # Uncompressed boot code. It inflates stream1 and jumps to it.
+  # Its variables (0x8690 bytes, cleared at start-up) follow it in RAM.
+  - name: boot
+    type: code
+    start: 0x1000
+    vram: 0x80000400
+    bss_size: 0x8690
+    subsegments:
+      - [0x1000, asm]
+      - [0x7160, data]   # includes the stream table at 0x7DE0
+      - { start: 0x7EC0, type: bss, vram: 0x800072C0 }
+
+  # Everything else in the original ROM: unknown data and the compressed
+  # 1172 streams (including the compressed copies of the three code streams).
+  - name: rom_data
+    type: bin
+    start: 0x7EC0
+
+  # stream1 (table entry 0): main game code, loaded once at boot.
+  - name: stream1
+    type: code
+    start: 0xC00000
+    vram: 0x8000F960
+    subsegments:
+      - [0xC00000, asm]
+      # CPU code ends at about +0x32C90. The rest is RSP microcode (and
+      # possibly data); RSP code must not be disassembled as CPU code.
+      - [0xC32C90, bin, stream1_rsp]
+
+  # stream2 and stream3 (table entries 1 and 2) are loaded later by stream1
+  # into overlapping RAM, so each gets its own exclusive_ram_id and its own
+  # symbol names.
+  - name: stream2
+    type: code
+    start: 0xC3A7A0
+    vram: 0x801ACB20
+    exclusive_ram_id: stream2
+    symbol_name_format: $VRAM_$SEG
+    subsegments:
+      - [0xC3A7A0, asm]
+      - [0xC5C180, data]   # code ends at +0x219E0
+
+  - name: stream3
+    type: code
+    start: 0xD232E0
+    vram: 0x801AD900
+    exclusive_ram_id: stream3
+    symbol_name_format: $VRAM_$SEG
+    subsegments:
+      - [0xD232E0, asm]
+      - [0xD39A40, data]   # code ends at +0x16760
+
+  - [0xD48CA0]
