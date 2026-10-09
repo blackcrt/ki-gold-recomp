@@ -58,6 +58,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 
 - [ ] `python3 tools/scan_rom.py`: identify graphics and audio microcode
 - [x] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
+- [x] `python3 tools/unpack_rom.py`: build the decompressed ROM in `build/` (original ROM plus the three inflated code streams)
 - [ ] Generate a splat config in `disasm/` and get a clean split
 - [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Lead, not confirmed: the `romcheck` header reports libultra 2.0D
 - [ ] Generate the symbol file N64Recomp reads (`syms/`)

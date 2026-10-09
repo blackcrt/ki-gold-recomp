@@ -69,5 +69,6 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `tools/guard.py` | Legal guard: blocks ROMs, generated code, binaries, big files |
 | `tools/romcheck.py` | Checks the ROM, converts byte order |
 | `tools/scan_rom.py` | Recon scan for microcode and Rare compression |
+| `tools/unpack_rom.py` | Builds the decompressed ROM for splat and N64Recomp (output in `build/`, never committed) |
 | `requirements.txt` | Python tools for recon (splat), installed into `disasm/.venv` |
 | `.gitattributes` | Keeps line endings consistent between Ubuntu and Windows |

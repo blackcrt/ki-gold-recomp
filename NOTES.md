@@ -2,6 +2,32 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-08: Unpacker tool, decompressed ROM builds
+
+**Done**
+- Added `tools/unpack_rom.py`. It checks the ROM SHA1, reads the stream table at ROM 0x7DE0, inflates table entries 0, 1, 2, and writes `build/kigold.decompressed.z64`: the original 12 MB unchanged, then the three code images. It also writes `build/unpack_layout.toml` (addresses and sizes only). Both are git-ignored.
+- Added `tools/test_unpack_rom.py`, a known-answer test on a synthetic ROM. 20/20 checks pass.
+- Result on the real ROM (total size 0xD48CA0, about 13.9 MB):
+
+| Segment | ROM offset in the decompressed ROM | RAM address | Size |
+| --- | --- | --- | --- |
+| stream1 | 0xC00000 | 0x8000F960 | 0x3A7A0 |
+| stream2 | 0xC3A7A0 | 0x801ACB20 | 0xE8B40 |
+| stream3 | 0xD232E0 | 0x801AD900 | 0x259C0 |
+
+- Verified from the output file: the first 12 MB still matches the recorded SHA1, and each segment starts with sensible code at its RAM address.
+  - stream1: starts with a normal function opening. 98% of its internal call targets land on a function start.
+  - stream2: same, 100%.
+  - stream3: starts with a loop that clears memory from 0x801D32C0, which is exactly where stream3 ends. The three addresses stream 1 calls outside itself (0x801ACB20, 0x801AD900, 0x801AE460) are all real routine starts.
+- **Stream 3 is mostly hand-written assembly:** 629 plain jumps (`j`) against 130 `jr ra`, many routines end with a jump instead of a return, small data tables sit between routines, and it touches CPU control registers directly (`mfc0`). So the `jr ra` count undercounts its functions.
+
+**Stuck / unknown**
+- Stream 3's style will make function splitting harder for splat and N64Recomp (routines without a clear end, data inside code). Expect manual symbol work there, and it is where WM2K-style cleanup scripts matter most.
+- Where CPU code ends in stream1 is only approximate (about +0x32C90), so the layout file has no `code_size` for it.
+
+**Next**
+- The splat config, pointed at the decompressed ROM and using the layout file for segment addresses.
+
 ## 2026-10-08: Boot code traced, code stream RAM addresses found
 
 **Done**
