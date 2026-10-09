@@ -1,6 +1,6 @@
 # KI Gold Recomp: Project Plan
 
-**Status:** Phase 0 not started. Planning only until BlackCRT says go.
+**Status:** Phase 0 done (2026-10-08). Phase 1 (Recon) is next.
 **Last updated:** 2026-10-08
 
 ## Goal
@@ -46,20 +46,20 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 | 5: Polish and publish check | Clean build from a fresh clone using only the README; your own cartridge dump works | Both pass |
 | 6: Optional | Partial decomp of systems a feature needs (for example, the HUD or camera) | BlackCRT's call |
 
-### Phase 0 checklist (when BlackCRT says go)
+### Phase 0 checklist (done 2026-10-08)
 
-- [ ] Follow `docs/SETUP.md` on the Windows PC
+- [x] Follow `docs/SETUP.md` on the Windows PC (Parts 1, 3, 4, 5 done; Part 2, the Windows build tools, is deferred to the start of Phase 2 as planned)
 - [x] Create the private GitHub repo (done 2026-10-08)
-- [ ] Guard hook on, and it blocks a test commit of the ROM
-- [ ] `python3 tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
-- [ ] Ollama and Qwen2.5-Coder 14B installed and sanity checked
+- [x] Guard hook on, and it blocks a test commit of the ROM (blocked a forced ROM commit with 6 reasons; the GitHub Actions guard also passed)
+- [x] `python3 tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
+- [ ] Ollama and Qwen2.5-Coder 14B installed and sanity checked. **Deferred:** skipped on purpose, see the decisions log
 
 ### Phase 1 checklist
 
 - [ ] `python3 tools/scan_rom.py`: identify graphics and audio microcode
 - [ ] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
 - [ ] Generate a splat config in `disasm/` and get a clean split
-- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified
+- [ ] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Lead, not confirmed: the `romcheck` header reports libultra 2.0D
 - [ ] Generate the symbol file N64Recomp reads (`syms/`)
 - [ ] Go/no-go: write findings to `NOTES.md` and confirm the plan
 
@@ -138,3 +138,4 @@ Other rules: dump your own cartridge before going public, free forever, labeled 
 | 2026-10-08 | Dropped the Makefile and IDO compiler (decomp-only tools) |
 | 2026-10-08 | Hybrid setup: Ubuntu in WSL as home base, Windows build tools only for the game `.exe`, repo on `C:\src`. No Docker |
 | 2026-10-08 | Coach relay workflow: claude.ai chat coaches, BlackCRT relays to and from Claude Code |
+| 2026-10-08 | Ollama (local model) skipped on purpose. Claude Code does that work instead; revisit only if usage limits become a problem |
