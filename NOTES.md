@@ -2,6 +2,87 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Submodules, license, CMake skeleton, clean configure (Phase 2, task 6b)
+
+**Result: the three runtime libraries are in `lib/` as submodules at the agreed pins, the repo is GPL-3.0, and `tools/build.ps1` gets a clean CMake configure (exit 0, clang-cl 19.1.5, x64).** Nothing was compiled. There is no `main.cpp` yet; that is task 6c.
+
+**Decisions on the 6a plan (BlackCRT, 2026-10-10)**
+1. Pins: N64ModernRuntime `4dc67ed`, RecompFrontend `1b98855`, rt64 `99067ac`. These are the commits WM2K's forks are built on (its forks add 10, 1 and 8 commits on top).
+2. License: the repo is GPL-3.0. `COPYING` added, and each file adapted from WM2K says so at the top.
+3. RecompFrontend: submodule only, never copy its files. `PLAN.md` has a "before going public" checklist with "confirm RecompFrontend's license" first.
+4. Fonts and controller database: copy from the submodules at build time, do not commit them. **Could not be done as written, see "Needs a decision".**
+- Also added to the Phase 2 checklist, after first link: hook the 3 inflate sites so the runtime sees streams 1 to 3 load (and swap streams 2 and 3).
+
+**The submodules**
+
+| Path | URL | Pin | Size on disk |
+| --- | --- | --- | --- |
+| `lib/N64ModernRuntime` | `github.com/N64Recomp/N64ModernRuntime` | `4dc67eda958e5bf7d347e204eaa21798bc306a41` | 33 MB |
+| `lib/RecompFrontend` | `github.com/N64Recomp/RecompFrontend` | `1b988554352611b5f41900ac15241bd871285abb` | 38 MB |
+| `lib/rt64` | `github.com/rt64/rt64` | `99067acfa50273249a5ec3fd8656256e0f7f3d36` | 393 MB |
+
+- 32 nested libraries came with them. Fetched shallow (the pinned commit only, no history): about 220 MB downloaded. A full-history fetch would have been over 1 GB.
+- **Fresh clone command:** `git submodule update --init --recursive --depth 1`
+- **Trap:** `git submodule add` stages the pointer at the newest `main` commit. Check out the pin and `git add` the folder before running `submodule update`, or the update moves the folder back to `main`. This happened once here and was corrected; `git submodule status` now shows the three pins.
+
+**The pins are not on any upstream branch**
+- All three are real commits by Dario (the upstream author), dated 2026-01-29 and 2026-05-02. But each has diverged from upstream `main` (N64ModernRuntime: 109 commits `main` does not have, and `main` has 104 it does not; RecompFrontend 44 and 46; rt64 162 and 180). No upstream branch or tag contains them.
+- They still download from the upstream URLs when asked for by full commit ID, because GitHub shares storage between a repo and its forks. So the setup works today, but it is fragile: if GitHub stops serving them, a fresh clone fails. Which repo or branch they were first pushed to was not found.
+- They are reachable in the normal way from WM2K's forks (`jessetbh/*`, branch `wcw`).
+
+**What git sees (the third-party check)**
+- `git status` after adding: `.gitmodules` and three entries of type 160000 (a submodule pointer: a commit ID, no file content). No file from inside `lib/` is in our git.
+- `git add -f lib/rt64/src/contrib/dxc/bin/x64/dxil.dll` is refused by git itself: "Pathspec is in submodule".
+- No submodule is modified after the configure run (checked all 35).
+
+**Guard fix (`tools/guard.py`)**
+- The guard crashed on the first try: it read every staged path with `git show`, and a submodule pointer has no content to show. A crash, not a pass.
+- Now it recognizes pointers (mode 160000), still runs the name checks on their path, skips the content checks, and prints them: "3 submodule pointer(s), commit ID only".
+- Tested both ways: passes with the submodules staged (exit 0); a force-staged fake file with an N64 header and a `.bin` name is still blocked (exit 1). `--all` passes (GitHub Actions does not check out submodules, so it sees empty folders).
+
+**The build files**
+- `CMakeLists.txt`: adapted from WM2K's. Target `KIGoldRecompiled`. Same structure: rt64, the runtime, `RecompiledFuncs` as a static library, shader compiler settings, SDL2 2.30.3 downloaded into the build folder, RecompFrontend, then the exe. Differences: readable errors when the submodules or the generated code are missing, no icons or logo, console window in every build type for now, and no asset copy step. The exe's only source so far is `rsp/kigold_audio.cpp`.
+- `tools/build.ps1`: finds Build Tools with `vswhere`, loads the x64 environment, stops if clang-cl is not x64, runs the configure. `-Build` also compiles (not used yet), `-Fresh` deletes `build-msvc/` first.
+- From Ubuntu: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1'`
+- The run: exit 0, "Configuring done (12.9s)", "Build files have been written to: C:/src/ki-gold-recomp/build-msvc". Warnings are CMake deprecation notices in third-party files (nativefiledialog-extended, zstd, miniz). `build-msvc/` is 38 MB and git-ignored.
+
+**Licenses of the libraries** (read from each one's license file)
+
+| Library | License |
+| --- | --- |
+| N64ModernRuntime | GPL-3.0 |
+| RecompFrontend | **no license file** |
+| rt64 | MIT |
+| N64Recomp, ELFIO, rabbitizer, tomlplusplus, fmt, miniz, o1heap | MIT |
+| sljit, xxHash (two copies) | BSD 2-clause |
+| RmlUi, lunasvg | MIT |
+| freetype-windows-binaries | FreeType License (prebuilt binaries) |
+| ddspp, hlslpp, im3d, imgui, implot, plume, re-spirv, D3D12MemoryAllocator, VulkanMemoryAllocator, volk, SPIRV-Headers | MIT (SPIRV-Headers uses the Khronos MIT-style text) |
+| stb | MIT or public domain |
+| nativefiledialog-extended | zlib |
+| spirv-cross | Apache-2.0 |
+| Vulkan-Headers | Apache-2.0 or MIT |
+| zstd | BSD or GPL-2.0, your choice |
+| mupen64plus-core | GPL-2.0. rt64 only uses its API headers |
+| dxc (`rt64/dxc-bin`) | **no license file.** Prebuilt Microsoft shader compiler: `dxc.exe`, `dxcompiler.dll`, `dxil.dll` |
+| mupen64plus-win32-deps | **no license file at the top.** A bundle of prebuilt SDL2, freetype, libpng, zlib, boost and others, each with its own license |
+| SDL2 2.30.3 (downloaded by CMake, not a submodule) | zlib |
+
+- Nothing here conflicts with GPL-3.0 for a source-only repo, as far as a license-file reading goes. This is not legal advice. The three without a license file are the ones to settle before going public.
+- The build copies `SDL2.dll`, `dxil.dll` and `dxcompiler.dll` next to the exe. That is fine for a local build; it matters only if a binary were ever shared, which the plan rules out.
+
+**Needs a decision**
+1. **Assets (decision 4).** RecompFrontend loads `recomp.rcss`, three fonts (`InterVariable`, `NotoEmoji-Regular`, `promptfont`) and `icons/*.svg` from an `assets` folder next to the exe, but ships none of them. No submodule has them, or a controller database. WM2K commits its own copies. So "copy from the submodules" is not possible. Options: download them at configure time from their original projects at pinned versions (keeps them out of our git); or commit the text files (`.rcss`, `.svg`, controller database) and download only the fonts; or commit everything (the guard blocks font files today). Not needed for configure or for the first link, needed for the first run.
+2. **The pins.** Keep the upstream URLs with these fragile pins (as decided, works today), or point `.gitmodules` at a repo where the commits are on a real branch (WM2K's forks, or forks under BlackCRT's account).
+
+**Stuck / unknown**
+- Nothing compiled. A clean configure only proves CMake can read every build file and find the tools (ground rule 1).
+- The runtime's `recomp.h` comes from N64Recomp `f8d49ca` (the commit N64ModernRuntime pins). Our generated code was made with N64Recomp `ffb39cd`. If they disagree, the first compile will show it.
+- The intrin.h workaround in `CMakeLists.txt` is for clang 20 and newer. We have 19.1.5, so it is untested here but harmless.
+
+**Next**
+- Task 6c: `main.cpp` and the bodies the runtime does not provide (the 55 names with no body), then the first compile and link.
+
 ## 2026-10-10: RSPRecomp config for the audio microcode (Phase 2, task 5)
 
 **Result: the audio microcode translates. `rsp/kigold_audio.toml` is in the repo, RSPRecomp is step 6 of `tools/regen.py`, and the run is clean: exit 0, no warnings, `rsp/kigold_audio.cpp` is 73,112 bytes (2,272 lines).** Nothing was compiled or run as a game.

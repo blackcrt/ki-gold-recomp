@@ -16,6 +16,10 @@ Early setup. See `PLAN.md` for the roadmap.
 
 Not buildable yet. Instructions will be added once the recompilation pipeline exists.
 
+## License
+
+The code in this repository is licensed under the GNU General Public License v3.0, see `COPYING`. The build files are adapted from the [WWF WrestleMania 2000 recomp](https://github.com/jessetbh/WWFWrestleMania2000Recomp). The libraries under `lib/` are git submodules with their own licenses.
+
 ## Contributing
 
 This repository never accepts the ROM, extracted assets, generated code, executables, or leaked material. A commit guard (`tools/guard.py`) enforces this.

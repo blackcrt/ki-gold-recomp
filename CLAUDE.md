@@ -74,5 +74,9 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `rsp/kigold_audio.toml` | RSPRecomp config for the audio microcode. Its output `rsp/kigold_audio.cpp` is generated, never committed |
 | `tools/regen.py` | Regenerates `RecompiledFuncs/` and `rsp/kigold_audio.cpp` in one command (unpack check, split, symbols, N64Recomp, cleanup, RSPRecomp, report) |
 | `tools/fix_fallthroughs.py` | Cleanup step: chains functions that fall through into the next one. Run by `regen.py` |
+| `lib/` | Git submodules: N64ModernRuntime, RecompFrontend, rt64, at fixed pins. Never edit or copy files from here. Fresh clone: `git submodule update --init --recursive --depth 1` |
+| `CMakeLists.txt` | Build file for the Windows port (adapted from WM2K) |
+| `tools/build.ps1` | Loads the x64 clang-cl environment and runs CMake. From Ubuntu: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1'` (add `-Build` to compile). Output in `build-msvc/`, never committed |
+| `COPYING` | The license: GPL-3.0 |
 | `requirements.txt` | Python tools for recon (splat), installed into `disasm/.venv` |
 | `.gitattributes` | Keeps line endings consistent between Ubuntu and Windows |

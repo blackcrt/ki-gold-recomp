@@ -71,11 +71,25 @@ def known_rom_sha1() -> str | None:
     return None
 
 
+def submodule_paths() -> set[str]:
+    """Paths git tracks as submodule pointers (mode 160000).
+
+    A pointer is only a commit ID in another repo. The submodule's files are
+    never stored in our git, so there is no content here to check.
+    """
+    entries = git("ls-files", "-s", "-z").decode().split("\0")
+    return {entry.split("\t", 1)[1] for entry in entries if entry.startswith("160000 ")}
+
+
 def staged_files() -> list[tuple[str, bytes]]:
     names = git("diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR")
+    pointers = submodule_paths()
     files = []
     for name in filter(None, names.decode().split("\0")):
-        files.append((name, git("show", f":{name}")))  # the staged version
+        if name in pointers:
+            files.append((name, b""))  # no content, but the path is still checked
+        else:
+            files.append((name, git("show", f":{name}")))  # the staged version
     return files
 
 
@@ -134,6 +148,10 @@ def main() -> int:
         problems = check(name, data, rom_sha1)
         if problems:
             blocked[name] = problems
+
+    pointers = sorted(submodule_paths().intersection(name for name, _ in files))
+    if pointers:
+        print(f"guard: {len(pointers)} submodule pointer(s), commit ID only: {', '.join(pointers)}")
 
     if not blocked:
         print(f"guard: OK ({len(files)} file(s) checked)")
