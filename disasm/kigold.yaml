@@ -101,7 +101,71 @@ segments:
     exclusive_ram_id: stream3
     symbol_name_format: $VRAM_$SEG
     subsegments:
+      # Code and the tables inside it, from tools/stream3_map.py --yaml.
+      # Each data line: RAM address, what the tracer thinks it is, size.
+      # tools/gen_symbols.py refuses to run if these lines and the tracer disagree.
       - [0xD232E0, asm]
-      - [0xD39A40, data]   # code ends at +0x16760
+      - [0xD23C98, data]   # 0x801AE2B8, lookup table, 0x30
+      - [0xD23CC8, asm]
+      - [0xD23E38, data]   # 0x801AE458, lookup table, 0x8
+      - [0xD23E40, asm]
+      - [0xD26D04, data]   # 0x801B1324, mixed data, 0x20
+      - [0xD26D24, asm]
+      - [0xD28090, data]   # 0x801B26B0, lookup table, 0x58
+      - [0xD280E8, asm]
+      - [0xD29A40, data]   # 0x801B4060, lookup table, 0x10
+      - [0xD29A50, asm]
+      - [0xD2A71C, data]   # 0x801B4D3C, mixed data, 0xD8
+      - [0xD2A7F4, asm]
+      - [0xD2B544, data]   # 0x801B5B64, lookup table, 0x44
+      - [0xD2B588, asm]
+      - [0xD2BAA0, data]   # 0x801B60C0, mixed data, 0x48
+      - [0xD2BAE8, asm]
+      - [0xD2C144, data]   # 0x801B6764, mixed data, 0xC
+      - [0xD2C150, asm]
+      - [0xD2C248, data]   # 0x801B6868, mixed data, 0x4
+      - [0xD2C24C, asm]
+      - [0xD2F588, data]   # 0x801B9BA8, lookup table, 0xEC
+      - [0xD2F674, asm]
+      - [0xD2F8D8, data]   # 0x801B9EF8, lookup table, 0x18
+      - [0xD2F8F0, asm]
+      - [0xD2FF20, data]   # 0x801BA540, lookup table, 0x6C
+      - [0xD2FF8C, asm]
+      - [0xD301D8, data]   # 0x801BA7F8, lookup table, 0x8
+      - [0xD301E0, asm]
+      - [0xD30298, data]   # 0x801BA8B8, lookup table, 0x40
+      - [0xD302D8, asm]
+      - [0xD30644, data]   # 0x801BAC64, mixed data, 0x4
+      - [0xD30648, asm]
+      - [0xD30658, data]   # 0x801BAC78, lookup table, 0x9C
+      - [0xD306F4, asm]
+      - [0xD30A94, data]   # 0x801BB0B4, lookup table, 0x864
+      - [0xD312F8, asm]
+      - [0xD31620, data]   # 0x801BBC40, mixed data, 0x28
+      - [0xD31648, asm]
+      - [0xD31E78, data]   # 0x801BC498, lookup table, 0x64
+      - [0xD31EDC, asm]
+      - [0xD32958, data]   # 0x801BCF78, lookup table, 0x8
+      - [0xD32960, asm]
+      - [0xD3361C, data]   # 0x801BDC3C, lookup table, 0x20
+      - [0xD3363C, asm]
+      - [0xD344B0, data]   # 0x801BEAD0, pointer table, 0x14
+      - [0xD344C4, asm]
+      - [0xD35408, data]   # 0x801BFA28, mixed data, 0x8
+      - [0xD35410, asm]
+      - [0xD36820, data]   # 0x801C0E40, lookup table, 0x198
+      - [0xD369B8, asm]
+      - [0xD36B54, data]   # 0x801C1174, lookup table, 0x18
+      - [0xD36B6C, asm]
+      - [0xD376DC, data]   # 0x801C1CFC, lookup table, 0x4C
+      - [0xD37728, asm]
+      - [0xD37C7C, data]   # 0x801C229C, mixed data, 0x14
+      - [0xD37C90, asm]
+      - [0xD37DE4, data]   # 0x801C2404, mixed data, 0x8
+      - [0xD37DEC, asm]
+      - [0xD392E8, data]   # 0x801C3908, mixed data, 0x8
+      - [0xD392F0, asm]
+      - [0xD399C0, data]   # 0x801C3FE0, lookup table, 0x80
+      - [0xD39A40, data]   # code area ends at +0x16760
 
   - [0xD48CA0]

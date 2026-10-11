@@ -3,7 +3,8 @@
 
 Builds a tiny made-up splat project in a temporary folder (a config, two .s
 files, a symbol list) and checks the generator finds exactly the functions
-that were put in. Uses no real ROM data.
+that were put in. Also checks a traced section: a made-up tracer result
+replaces splat's functions there. Uses no real ROM data.
 
 Usage:
   python3 tools/test_gen_symbols.py
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent))
 import gen_symbols
@@ -56,14 +58,37 @@ SYMBOLS = ("// comment\nfirst = 0x80000400; // type:func\nlast = 0x80000430; // 
            "some_data = 0x80000440;\n")
 
 
-def run(main: str = MAIN, ovl: str = OVL, symbols: str = SYMBOLS, config: dict = CONFIG):
+# A traced segment: 4 words of code, a 2-word table, 2 more words of code, then
+# its data. splat sees one function before the table; the tracer says two.
+TRACED_SEG = {"name": "trc", "type": "code", "start": 0x4000, "vram": 0x80200000,
+              "symbol_name_format": "$VRAM_$SEG",
+              "subsegments": [[0x4000, "asm"], [0x4010, "data"], [0x4018, "asm"], [0x4020, "data"]]}
+TRACED_CONFIG = dict(CONFIG, segments=CONFIG["segments"][:4] + [TRACED_SEG, [0x5000]])
+TRACED_MAP = SimpleNamespace(rom=0x4000, vram=0x80200000, code_size=0x20,
+                             data=[(0x80200010, 0x80200018, "lookup table")],
+                             functions=[(0x80200000, 0x8, "call"), (0x80200008, 0x8, "entry"),
+                                        (0x80200018, 0x8, "pointer")])
+TRACED_FILES = {"4000.s": func("func_80200000_trc", 0x4000, 0x80200000, 4),
+                "4018.s": func("func_80200018_trc", 0x4018, 0x80200018, 2)}
+TRACED_SYMBOLS = SYMBOLS + "trc_entry = 0x80200000; // type:func segment:trc\n"
+
+
+def run(main: str = MAIN, ovl: str = OVL, symbols: str = SYMBOLS, config: dict = CONFIG,
+        files: dict = None, traced: dict = None):
     with tempfile.TemporaryDirectory() as tmp:
         asm = Path(tmp) / "asm"
         asm.mkdir()
         (asm / "1000.s").write_text(main)
         if ovl is not None:
             (asm / "2000.s").write_text(ovl)
-        return gen_symbols.generate(config, asm, symbols)
+        for name, text in (files or {}).items():
+            (asm / name).write_text(text)
+        return gen_symbols.generate(config, asm, symbols, traced)
+
+
+def traced_args(tmap=TRACED_MAP, seg: dict = TRACED_SEG, files: dict = TRACED_FILES) -> dict:
+    return dict(config=dict(TRACED_CONFIG, segments=CONFIG["segments"][:4] + [seg, [0x5000]]),
+                symbols=TRACED_SYMBOLS, files=files, traced={"trc": tmap})
 
 
 def fails(**kwargs) -> bool:
@@ -79,6 +104,9 @@ def main() -> int:
     parsed = tomllib.loads(gen_symbols.render(sections))["section"]
     main_sec, ovl_sec = sections
     no_code_end = dict(CONFIG, segments=[dict(CONFIG["segments"][1], subsegments=[[0x1000, "asm"]])])
+    trc = run(**traced_args())[0][2]
+    raw_file = dict(TRACED_FILES, **{"4018.s": "dlabel func_80200018_trc\n" + lines(0x4018, 0x80200018, 2, word=True)
+                                               + "enddlabel func_80200018_trc\n"})
     checks = [
         ("only code segments become sections", [s.name for s in sections] == ["main", "ovl"]),
         ("section address and code size come from the config",
@@ -109,6 +137,24 @@ def main() -> int:
         ("a function with no endlabel is refused", fails(main=MAIN + "glabel open\n" + lines(0x1040, 0x80000440, 1))),
         ("a missing .s file is refused", fails(ovl=None)),
         ("a segment with no code end is refused", fails(config=no_code_end, ovl=None)),
+        ("a traced section takes its functions from the tracer, and our name where we have one",
+         [(f.name, f.vram, f.size) for f in trc.funcs]
+         == [("trc_entry", 0x80200000, 8), ("func_80200008_trc", 0x80200008, 8), ("func_80200018_trc", 0x80200018, 8)]),
+        ("a traced section's code size comes from the tracer and includes its tables",
+         (trc.size, trc.tables, trc.files) == (0x20, [(0x80200010, 8)], [0x4000, 0x4018])),
+        ("the other sections are unchanged next to a traced one",
+         [(f.name, f.vram, f.size) for f in run(**traced_args())[0][0].funcs]
+         == [(f.name, f.vram, f.size) for f in main_sec.funcs]),
+        ("a config whose pieces differ from the tracer's is refused",
+         fails(**traced_args(seg=dict(TRACED_SEG, subsegments=[[0x4000, "asm"], [0x4020, "data"]])))
+         and fails(**traced_args(seg=dict(TRACED_SEG, subsegments=TRACED_SEG["subsegments"][:3])))),
+        ("a tracer result for another address is refused",
+         fails(**traced_args(tmap=SimpleNamespace(**dict(vars(TRACED_MAP), vram=0x80200004))))),
+        ("a traced function that reaches into a table is refused",
+         fails(**traced_args(tmap=SimpleNamespace(**dict(vars(TRACED_MAP), functions=[(0x8020000C, 8, "call")]))))),
+        ("a raw block in a traced section is refused", fails(**traced_args(files=raw_file))),
+        ("a missing code piece of a traced section is refused",
+         fails(**traced_args(files={"4000.s": TRACED_FILES["4000.s"]}))),
     ]
     for name, ok in checks:
         print(f"{'ok  ' if ok else 'FAIL'}  {name}")

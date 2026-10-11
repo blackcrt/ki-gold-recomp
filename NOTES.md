@@ -2,6 +2,43 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: stream3 map in the repo, symbol file now 1442 functions (session 2, task 2c)
+
+**Decision: option A (WM2K style) for stream3.** Recorded in `PLAN.md`. This task only put the map into the repo. No cleanup scripts and no fixes for the 8 stubbed functions; those are Phase 2.
+
+**Done**
+- **`tools/stream3_map.py`**: the tracer from `build/`, rewritten as a real tool. Same method, but the tracing is now a function that takes any block of code, which is what makes a test possible. `--yaml` prints the code and data pieces for `kigold.yaml`, `--symbols` the routine starts, `--funcs` the function list. Runs in under a second with `disasm/.venv/bin/python`.
+- **It no longer reads splat's output.** The throwaway used splat's labels as a last, weakest set of starting points. The tool's output now feeds splat's config, so that would be a circle. Dropping it changes nothing that matters: the function list is identical to the trial's, line for line (613). Only the bookkeeping moves: the 44 bytes that only splat's labels reached now count as "code nothing reaches" (traced 86,464, unreached 1,344 in 144 pieces, data 4,192 in 31 regions; same 92,000 total).
+- **`tools/test_stream3_map.py`**: known-answer test on a made-up program of 36 words, assembled by hand in the test, with the answer worked out on paper first. 18/18 checks pass: tables, unreached code, a rejected pointer, a jump table, and the split into 6 functions.
+- **`disasm/kigold.yaml`**: stream3 is now 31 code pieces and 31 data pieces in order, pasted from `--yaml`. Each data line carries its RAM address, the tracer's class and its size.
+- **`disasm/symbol_addrs.txt`**: 329 routine starts added from `--symbols` (the 330th, `0x801AD900`, was already there as `stream3_entry`). They use splat's default names (`func_801ADD2C_stream3`) and claim no meaning.
+- **`tools/gen_symbols.py`**: stream3's functions and code size now come from the tracer. splat's stream3 files are still read, but only to prove nothing was left undecoded. New refusals for a traced section: config pieces that differ from the tracer's, a traced function that is not inside one code piece, any raw block in splat's output. A traced function keeps our name from `symbol_addrs.txt` where one exists. The "named" column no longer counts default names. Its test went from 18 to 26 checks.
+- The code size has to come from the tracer because the last table (`0x801C3FE0`, 0x80 bytes) ends exactly where the code area ends, so "the first non-code piece" in the config no longer marks the end of the code.
+
+**Checks (all on the final code)**
+
+| Check | Result |
+| --- | --- |
+| splat split | exit 0, no warnings or errors |
+| Raw `.word` lines in stream3's 31 code files | 0 (was 30 raw blocks, 50,160 bytes) |
+| `syms/dump.toml` regenerates, all safety checks pass | yes: boot 119, stream1 459, stream2 251, stream3 613, total 1442 |
+| boot, stream1, stream2 sections | unchanged, byte for byte |
+| Whole file against the trial's `build/s3test/dump.toml` | identical |
+| N64Recomp on the real file (throwaway config `build/s3check/`, the trial's 10 stubs unchanged) | exit 0, "Function count: 1442" |
+| Tool tests | 5 of 5 pass |
+
+**Found on the way, not fixed (needs a Phase 2 decision)**
+- **86 addresses stored in three inline tables land in the middle of a function, not at its start.** The tables are `0x801B5B64` (7 of its 17 entries), `0x801BC498` (all 25) and `0x801C0E40` (54 of 102). They sit beside the 5 functions N64Recomp stubbed with "Failed to determine size of jump table", so they are very likely those hand-made dispatch tables. The split rule only makes a function start where a call, a branch or an address in the data area arrives; a jump through one of these tables that the tracer could not resolve adds nothing. Whether the 86 must become function starts depends on how the dispatch is fixed. Making them starts would raise the function count above 613, so it was left alone. The tool prints the number in its summary and the test covers it.
+- splat still draws its own function borders in stream3 (168 functions, 461 entry labels), because it demotes a routine start that other code branches past. Harmless now, since those borders are not used.
+
+**Stuck / unknown**
+- Same as 2b: nothing was compiled or run. "Function count: 1442" means N64Recomp reads the file, nothing more (ground rule 1).
+- The throwaway files in `build/` (`stream3_map.py`, its report, `s3test/`, `s3check/`) are still there. They are git-ignored; delete when convenient.
+
+**Next**
+- Phase 1 go/no-go write-up (the last open box).
+- Phase 2, in this order of risk: the 243 fall-throughs (silent miscompile), the cross-function loops, then the 8 stubbed functions together with the 86 table targets above.
+
 ## 2026-10-10: stream3 mapped by tracing, and a trial N64Recomp run (session 2, tasks 2a and 2b)
 
 Read-only for `disasm/`, `syms/` and `tools/`. Everything lives in `build/` (git-ignored): the tracer `build/stream3_map.py`, its report `build/stream3_map_report.txt`, the function list `build/stream3_funcs.txt`, and the trial run in `build/s3test/`.
