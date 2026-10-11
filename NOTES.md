@@ -19,6 +19,7 @@ Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 | stream3 | 0xD232E0 | 0x801AD900 | 0x16760 | 78 | 1 | **45%** |
 
 - **Built N64Recomp** (commit ffb39cd) into `build/N64Recomp/build-linux/` (git-ignored). Ubuntu had no C++ tools and `sudo` needs a password, so the build uses pip packages in `~/.cache/kigold-toolchain` (`cmake`, `ninja`, and `ziglang`, whose bundled clang is the compiler, through four small wrapper scripts in that folder). Nothing was installed system-wide.
+  - **Update 2026-10-10:** that workaround is gone. BlackCRT installed `build-essential`, `cmake` and `ninja-build` system-wide (gcc/g++ 15.2.0, cmake 4.2.3, ninja 1.13.2, all in `/usr/bin`). `build-linux/` was deleted and N64Recomp rebuilt from a clean configure at the same commit (ffb39cd) with only those tools: 73/73 steps, exit 0, no warnings. The known-answer check below gives the same answer with the new build (4 sections in `syms/dump.toml`, "Function count: 907", same first stop at `func_800064F0`). `~/.cache/kigold-toolchain` was then deleted.
 - **Known-answer check:** ran N64Recomp with a throwaway config (`build/symtest/`, git-ignored) on the decompressed ROM and `syms/dump.toml`. **It reads the file without errors**: 4 sections, "Function count: 907", no parse or bounds complaints. No generated C was kept outside `build/`.
 - N64Recomp then stops at the first function it cannot translate. To see the whole picture I stubbed each such function in the throwaway config and reran (33 reruns). What it could not translate:
   - **boot: 1.** `func_800064F0` reads CPU register 13 (Cause). This is the `__osGetCause` lead from session 5, still unnamed. The runtime does not recompile such OS internals; it needs its name or a stub.
@@ -36,7 +37,7 @@ Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 **Stuck / unknown**
 - "Reads without errors" is as far as this check goes. Nothing was compiled or run; ground rule 1 still applies.
 - The stub loop stopped inside stream3, so there may be more untranslatable code after that point in stream3.
-- The toolchain in `~/.cache/kigold-toolchain` is a workaround. A normal install (`sudo apt install build-essential cmake ninja-build`) would replace it; BlackCRT's call.
+- ~~The toolchain in `~/.cache/kigold-toolchain` is a workaround.~~ Resolved 2026-10-10: replaced by the system gcc, cmake and ninja (see the update under "Built N64Recomp" above).
 
 **Next**
 - Phase 1 go/no-go write-up. Microcode is a go; boot, stream1 and stream2 are in good shape (3 problem functions out of 829); **stream3 is the open problem** and needs a decision on how to tackle it.
