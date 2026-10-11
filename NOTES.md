@@ -2,6 +2,58 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Dropped delay slots fixed in the tracer (Phase 2, task 4b)
+
+**Result: it was a tracer bug (two of them), not a real jump. Fixed in `tools/stream3_map.py`. The 3 dropped instructions are back in the generated C, and `tools/regen.py` now stops if a function is ever cut before a delay slot again.** stream3 has 605 functions (was 613), the symbol file 1434 (was 1442). Nothing was compiled or run as a game.
+
+**Why the tracer cut at a delay slot**
+- Nothing jumps to, calls, or stores any of the 4 delay slot addresses. No branch, no jump table entry, no word in the data.
+- Each became a function start because the tracer believed the code builds that address with `lui` + `addiu`, and the split treats every such value as a "pointer start".
+
+| Delay slot | Cause |
+| --- | --- |
+| `0x801C0E3C`, `0x801C3FDC` | **Bug B.** Real constants, but they are bases of lookup tables that start one word later (the code adds an index and loads through them, at `0x801C0B90` and `0x801C3B9C`). The tracer already knew they are table bases and did not trace them as code, but the split step used all `lui` + `addiu` values, table bases included |
+| `0x801C0008`, `0x801C0200` | **Bug A.** No such constant exists. `addiu a2, a2, 8` at `0x801B15E4` and `addiu s6, s6, 0x200` at `0x801B3994` were paired with a leftover `lui 0x801C` seen earlier in the trace at a higher address (2,312 and 6,264 bytes away). The "at most 8 bytes before" test had no lower bound |
+
+- Bug A made 3 more false starts nearby (`0x801BFFE0`, `0x801BFFF0`, `0x801C0010`). All 5 pairings it produced were stale ones; none was a real constant.
+
+**The fix (two one-line changes in `tools/stream3_map.py`)**
+- A: the `lui` must be 4 or 8 bytes before the `addiu`/`ori`, not after it.
+- B: the split uses only `lui` + `addiu` values that are not table bases, the same list the tracer already used for seeds.
+- `disasm/symbol_addrs.txt`: removed the 7 routine names the tracer no longer produces (`func_801BFFE0`, `func_801BFFF0`, `func_801C0008`, `func_801C0010`, `func_801C0200`, `func_801C0E3C`, `func_801C3FDC`, all `_stream3`). They were tracer output, not hand-found names.
+- Options for "a jump really targets a delay slot" were not needed: none does.
+
+**What changed in the map, and what did not**
+
+| | Before | After |
+| --- | --- | --- |
+| stream3 functions | 613 | 605 |
+| stream3 routines | 330 | 323 |
+| Code reached, unreached code, tables, the 86 table targets | | all identical (86,464 bytes, 1,344 in 144 pieces, 4,192 in 31, 86) |
+| Fall-throughs fixed by the cleanup step | 239 | 235 (4 were false cuts inside one real function) |
+| Left alone by the cleanup step | 7 | 1 (`__osCleanupThread`, no body) |
+
+**The new check**
+- `tools/fix_fallthroughs.py` now treats "a function ends on a branch or jump" as an error, not a report line. `tools/regen.py` runs it right after the symbol step and stops before N64Recomp. The script itself also exits 1.
+- Proven on the old symbol file before regenerating: it failed and named the 4 functions.
+
+**The run** (`python3 tools/regen.py`: exit 0, "Function count: 1434", `__osGetCause_recomp` 0, 275 calls to 55 names with no body, same as before)
+- The delay slots are now in the generated C, inside one function with their branch:
+  - `func_801BFFE8_stream3`: `bnel` at `0x801C0004` now runs `addiu a1, a1, 0x4` on the taken path, and the not-taken path carries on inside the same function.
+  - `func_801C0150_stream3`: `bnel` at `0x801C01FC` now runs `addiu t3, k1, 0x20`.
+  - `func_801C0BF4_stream3`: `jr ra` at `0x801C0E38` now runs `addiu sp, sp, 0x10` before `return`.
+  - `func_801C3C1C_stream3`: `jr ra` at `0x801C3FD8` with its nop.
+- Second run of the cleanup script: "fixed: 0, already fixed: 235", checksums identical.
+- All 6 tool tests pass. `test_stream3_map.py` went from 18 to 22 checks: a second made-up program with a 1-based table behind a `jr ra` and a stale `lui`. The 4 new checks failed on the unfixed tracer. `test_fix_fallthroughs.py` went from 27 to 29.
+
+**Stuck / unknown**
+- Fix A only removes the pairings that are provably wrong (a `lui` later in memory). A `lui` 4 or 8 bytes before an unrelated `addiu` on a path that never runs them in a row could still fool it. The new check catches the case where that lands on a delay slot; a false start elsewhere would only split a function in two, which the entry rule and the fall-through step handle.
+- Numbers in older entries (613 functions, 1442 in total, 239 fall-throughs, 330 routines) are from before this fix.
+- Nothing compiled or run (ground rule 1).
+
+**Next**
+- Phase 2 checklist: RSPRecomp config for the audio microcode.
+
 ## 2026-10-10: Fall-through cleanup script (Phase 2, task 4)
 
 **Result: `tools/fix_fallthroughs.py` chains 239 stream3 functions into the function below them, as a step in `tools/regen.py`. 7 open-ended functions are reported and left alone; 3 of those are a new silent problem (a dropped delay slot).** Nothing was compiled or run as a game.

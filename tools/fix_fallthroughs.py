@@ -18,9 +18,14 @@ Which functions fall through is decided from the MIPS code, not from the C:
     either dead or entered through a table the tracer could not follow. It gets
     the same fix: harmless if dead, needed if not.
 
+An error, never fixed here:
+  - A function whose last instruction is itself a branch or jump. Its delay slot
+    is then the first instruction of the next function, and N64Recomp silently
+    drops it. That is a wrong function split, to be fixed where the split is
+    made (tools/stream3_map.py or disasm/symbol_addrs.txt). tools/regen.py
+    stops on it before N64Recomp runs.
+
 Reported and left alone:
-  - Functions whose last instruction is itself a branch or jump. Its delay slot
-    is the first instruction of the next function, which a call cannot express.
   - Functions that fall off into something that is not a function.
   - Stubbed functions (empty on purpose) and functions with no body in the C.
 
@@ -155,6 +160,22 @@ def find(symbols: dict, rom: bytes) -> list:
     return found
 
 
+def split_delay_slots(found: list) -> list:
+    """Functions cut between a branch or jump and its delay slot. There must be none."""
+    return [f for f in found if f.state == BRANCH_AT_END]
+
+
+def split_delay_slot_error(found: list) -> str:
+    """The error text for split_delay_slots, or an empty string when all is well."""
+    bad = split_delay_slots(found)
+    if not bad:
+        return ""
+    return "\n".join(
+        [f"{len(bad)} function(s) end on a branch or jump, so the delay slot is cut off into the next function:"]
+        + [f"  {f.section}: {f.name} (delay slot is the start of {f.next_name})" for f in bad]
+        + ["N64Recomp would drop that instruction without a warning. Fix the function split, not the C."])
+
+
 def fix(files: dict, found: list, stubs: set) -> dict:
     """Add the call and return to each function that needs it.
 
@@ -220,11 +241,15 @@ def report(found: list) -> str:
     return "\n".join(out)
 
 
+def find_all() -> list:
+    """find() on the real symbol file and decompressed ROM."""
+    return find(tomllib.loads(SYMBOLS.read_text()), ROM.read_bytes())
+
+
 def run(out_dir: Path = OUT_DIR) -> list:
     """Fix the generated C in out_dir in place. Returns the list of functions looked at."""
-    symbols = tomllib.loads(SYMBOLS.read_text())
     stubs = set(tomllib.loads(RECOMP_CONFIG.read_text()).get("patches", {}).get("stubs", []))
-    found = find(symbols, ROM.read_bytes())
+    found = find_all()
     files = {path.name: path.read_text() for path in sorted(out_dir.glob("*.c"))}
     for name, text in fix(files, found, stubs).items():
         (out_dir / name).write_text(text, newline="\n")
@@ -236,7 +261,12 @@ def main() -> int:
         if not needed.exists():
             print(f"FAIL: {needed} is missing. Run tools/regen.py.")
             return 1
-    print(report(run()))
+    found = run()
+    print(report(found))
+    error = split_delay_slot_error(found)
+    if error:
+        print(f"FAIL: {error}")
+        return 1
     return 0
 
 

@@ -15,7 +15,7 @@ Section "s" at RAM 0x80100000 (ROM 0x1000), in this order:
   f_b         addiu / b f_ret / nop                   closed, "b" never comes back
   f_unseen    j f_ret / nop / addiu                   falls (unseen entry) into f_loop
   f_loop      bne to +0x10 / nop / jr ra / nop / addiu   falls into f_edge, through its own branch
-  f_edge      addiu / bne                             branch at end, left alone
+  f_edge      addiu / bne                             branch at end: an error, never fixed
   f_slot      addiu / jr ra / nop                     closed
   f_stub      addiu                                   falls, but stubbed in the config
   f_tonobody  addiu                                   falls into f_nobody, which has no C body
@@ -160,6 +160,11 @@ def main() -> int:
         ("nothing was removed: only whole lines were added",
          [l for l in all_text.split("\n") if ff.MARKER not in l and "(rdram, ctx);" not in l and l != "    return;"]
          == "".join(files.values()).split("\n")),
+        ("a function cut before its delay slot is an error that names it and the next function",
+         [f.name for f in ff.split_delay_slots(found)] == ["f_edge"]
+         and "s: f_edge (delay slot is the start of f_slot)" in ff.split_delay_slot_error(found)),
+        ("no error when no function is cut before its delay slot",
+         ff.split_delay_slot_error([f for f in found if f.name != "f_edge"]) == ""),
         ("second run changes no file", changed2 == {}),
         ("second run reports the 6 as already fixed",
          sorted(f.name for f in found2 if f.result == ff.ALREADY)

@@ -20,6 +20,21 @@ The program, at RAM 0x80100000 (ROM 0x2000):
   90 data    0x8010001C (points at the lookup table, so it is not code),
              the jump table (case_a, case_b, 0), and the address of fq
 
+A second program checks that a function never starts on a delay slot just
+because an address was built that happens to land there (two tracer bugs found
+in Phase 2, task 4b):
+
+  00 g0     j g2 / nop
+  08 gback  addiu a1,a1,0x34   a1 was overwritten in g2, so this builds no address.
+                               A tracer that pairs it with g2's lui gets 0x80100034.
+  0C        lui+addiu builds 0x80100020, adds an index, loads through it: a table base.
+            The table is 1-based, so the base is the word before it.
+  1C        jr ra
+  20        its delay slot (the table base address)
+  24        the lookup table, 2 words that are not valid instructions
+  2C g1     addiu / bne back to 2C / its delay slot at 34 / jr ra / nop
+  40 g2     lui a1,0x8010 / addu a1,a0,a0 (overwrites a1) / jal g1 / nop / j gback / nop
+
 Usage:
   disasm/.venv/bin/python tools/test_stream3_map.py
 """
@@ -32,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import stream3_map
 
 ROM, VRAM, CODE_SIZE = 0x2000, 0x80100000, 0x90
-AT, V0, A0, T0, T1, RA = 1, 2, 4, 8, 9, 31
+AT, V0, A0, A1, T0, T1, RA = 1, 2, 4, 5, 8, 9, 31
 NOP = 0
 
 
@@ -67,6 +82,16 @@ DATA = [a(0x1C), a(0x5C), a(0x6C), 0, a(0x84)]
 CALLER_VRAM = 0x80000400
 CALLER = [jal(a(0x00)), NOP, lui(A0, 0x8010), addiu(A0, A0, 0x84), jal(0x80200000), NOP]
 
+CODE2 = [
+    j(a(0x40)), NOP,                                                                          # 00 g0
+    addiu(A1, A1, 0x34),                                                                      # 08 gback
+    lui(T0, 0x8010), addiu(T0, T0, 0x20), addu(T0, T0, A0), lw(T1, 0, T0), jr(RA),            # 0C
+    addiu(V0, 0, 1),                                                                          # 20 delay slot
+    0x01020304, 0x05060708,                                                                   # 24 lookup table
+    addiu(V0, 0, 2), bne(A0, 0, a(0x30), a(0x2C)), addiu(V0, V0, 1), jr(RA), NOP,             # 2C g1
+    lui(A1, 0x8010), addu(A1, A0, A0), jal(a(0x2C)), NOP, j(a(0x08)), NOP,                    # 40 g2
+]
+
 
 def blob(code, data) -> bytes:
     return struct.pack(">%dI" % (len(code) + len(data)), *code, *data)
@@ -93,6 +118,8 @@ def main() -> int:
     no_table = CODE[:7] + [addiu(V0, 0, 8), addiu(V0, 0, 9)] + CODE[9:]
     no_table[3], no_table[4] = NOP, NOP
     m_no_table = run(code=no_table, data=DATA[1:])
+    m2 = stream3_map.trace_segment("test2", ROM, blob(CODE2, []), VRAM, len(CODE2) * 4, {a(0x00): [CALLER_VRAM]})
+    ends2 = {start + size for start, size, _ in m2.functions}
     checks = [
         ("calls from other code are found, calls to elsewhere are not", dict(calls) == {a(0x00): [CALLER_VRAM]}),
         ("an address built with lui+addiu in other code is found", dict(consts) == {a(0x84): [CALLER_VRAM + 0xC]}),
@@ -136,6 +163,15 @@ def main() -> int:
          stream3_map.symbol_lines(m)[1:3] == ["func_80100024_test = 0x80100024; // type:func segment:test",
                                               "func_80100030_test = 0x80100030; // type:func segment:test"]
          and len(stream3_map.symbol_lines(m)) == 5),
+        ("a table base that lands on a delay slot does not start a function",
+         a(0x20) not in [f[0] for f in m2.functions] and m2.data == [(a(0x24), a(0x2C), "mixed data")]),
+        ("an addiu is not paired with a lui that comes later in memory",
+         a(0x34) not in [f[0] for f in m2.functions]),
+        ("second program: functions are g0, gback, g1, g2 and nothing else",
+         m2.functions == [(a(0x00), 0x8, "call"), (a(0x08), 0x1C, "entry"),
+                          (a(0x2C), 0x14, "call"), (a(0x40), 0x18, "entry")]),
+        ("second program: no function ends between a branch or jump and its delay slot",
+         a(0x20) not in ends2 and a(0x34) not in ends2),
     ]
     for name, ok in checks:
         print(f"{'ok  ' if ok else 'FAIL'}  {name}")

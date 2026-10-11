@@ -184,7 +184,9 @@ class Tracer:
         op, rs, rt, imm = w >> 26, (w >> 21) & 31, (w >> 16) & 31, w & 0xFFFF
         if op == LUI:
             self._hi[rt] = (imm, a)
-        elif op in (ADDIU, ORI) and rs in self._hi and a - self._hi[rs][1] <= 8:
+        # The lui must sit just before. The trace jumps around, so a leftover lui
+        # from higher up in memory is not this instruction's partner.
+        elif op in (ADDIU, ORI) and rs in self._hi and 0 < a - self._hi[rs][1] <= 8:
             t = ((self._hi[rs][0] << 16) + (signed16(imm) if op == ADDIU else imm)) & 0xFFFFFFFF
             if self.in_code(t):
                 self.consts[t].append(a)
@@ -398,7 +400,9 @@ def trace_segment(name: str, rom: int, blob: bytes, vram: int, code_size: int,
 
     starts = {vram} | set(ext_calls) | t.call_targets
     table_targets = {x for targets in t.table_jumps.values() for x in targets}
-    pointer_starts = {x for x in own_pointers | set(other_pointers) | set(t.consts) | set(ext_consts)
+    # A table base is not a way into code, even when it lands on an instruction
+    # (the word before a 1-based table is often the delay slot of a jr ra).
+    pointer_starts = {x for x in own_pointers | set(other_pointers) | set(t.code_consts()) | set(ext_consts)
                       if x in t.reached} - table_targets
     natural_starts = {s for s in starts | pointer_starts if s in t.reached}
 

@@ -7,6 +7,7 @@ Runs the steps in the only order that works:
      rebuilds it from baserom.us.z64.
   2. Split: splat disassembles the ROM into disasm/asm/.
   3. Symbols: tools/gen_symbols.py writes syms/dump.toml from the split.
+     Then a check: no function may end between a branch and its delay slot.
   4. Recompile: N64Recomp reads kigold.toml and writes RecompiledFuncs/.
   5. Cleanup (ground rule 2 in PLAN.md): fix what N64Recomp gets wrong.
      - tools/fix_fallthroughs.py chains functions that fall into the next one.
@@ -90,6 +91,11 @@ def main() -> int:
     print("[3/6] Symbols (gen_symbols.py)")
     if subprocess.run([str(VENV_PYTHON), "tools/gen_symbols.py"], cwd=REPO).returncode != 0:
         return fail("tools/gen_symbols.py")
+    # N64Recomp drops a delay slot that sits in the next function, without a warning.
+    error = fix_fallthroughs.split_delay_slot_error(fix_fallthroughs.find_all())
+    if error:
+        return fail(error)
+    print("  no function ends between a branch or jump and its delay slot")
 
     print("[4/6] Recompile (N64Recomp)")
     # Start from an empty folder so no file from an older run is left behind.
