@@ -8,10 +8,10 @@ Runs the steps in the only order that works:
   2. Split: splat disassembles the ROM into disasm/asm/.
   3. Symbols: tools/gen_symbols.py writes syms/dump.toml from the split.
   4. Recompile: N64Recomp reads kigold.toml and writes RecompiledFuncs/.
-  5. Report: function count, and calls to functions that have no body.
-
-Cleanup scripts (ground rule 2 in PLAN.md) will run between steps 4 and 5
-once they exist.
+  5. Cleanup (ground rule 2 in PLAN.md): fix what N64Recomp gets wrong.
+     - tools/fix_fallthroughs.py chains functions that fall into the next one.
+     New cleanup scripts go here, in this step.
+  6. Report: function count, and calls to functions that have no body.
 
 Usage:
   python3 tools/regen.py
@@ -26,6 +26,9 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import fix_fallthroughs
 
 REPO = Path(__file__).resolve().parent.parent
 VENV_PYTHON = REPO / "disasm" / ".venv" / "bin" / "python"
@@ -66,7 +69,7 @@ def main() -> int:
         if not needed.exists():
             return fail(f"{needed} is missing. See docs/SETUP.md.")
 
-    print("[1/5] Unpack check")
+    print("[1/6] Unpack check")
     if rom_ok():
         print(f"  {ROM.relative_to(REPO)} matches the SHA1 in disasm/kigold.yaml")
     else:
@@ -76,7 +79,7 @@ def main() -> int:
         if not rom_ok():
             return fail("the rebuilt ROM still does not match the SHA1 in disasm/kigold.yaml")
 
-    print("[2/5] Split (splat)")
+    print("[2/6] Split (splat)")
     split = subprocess.run([str(VENV_PYTHON), "-m", "splat", "split", SPLAT_CONFIG.name],
                            cwd=SPLAT_CONFIG.parent, capture_output=True, text=True)
     SPLIT_LOG.write_text(split.stdout + split.stderr)
@@ -84,11 +87,11 @@ def main() -> int:
     if split.returncode != 0:
         return fail("splat split")
 
-    print("[3/5] Symbols (gen_symbols.py)")
+    print("[3/6] Symbols (gen_symbols.py)")
     if subprocess.run([str(VENV_PYTHON), "tools/gen_symbols.py"], cwd=REPO).returncode != 0:
         return fail("tools/gen_symbols.py")
 
-    print("[4/5] Recompile (N64Recomp)")
+    print("[4/6] Recompile (N64Recomp)")
     # Start from an empty folder so no file from an older run is left behind.
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     recomp = subprocess.run([str(N64RECOMP), RECOMP_CONFIG.name], cwd=REPO, capture_output=True, text=True)
@@ -102,7 +105,11 @@ def main() -> int:
     if recomp.returncode != 0:
         return fail("N64Recomp")
 
-    print("[5/5] Report")
+    print("[5/6] Cleanup")
+    for line in fix_fallthroughs.report(fix_fallthroughs.run(OUT_DIR)).splitlines():
+        print(f"  {line}")
+
+    print("[6/6] Report")
     bodies, missing = calls_without_body(OUT_DIR)
     print(f"  {len(list(OUT_DIR.iterdir()))} files in {OUT_DIR.name}/, {bodies} function bodies")
     print(f"  __osGetCause_recomp calls: {missing.get('__osGetCause_recomp', 0)}")

@@ -2,6 +2,108 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Fall-through cleanup script (Phase 2, task 4)
+
+**Result: `tools/fix_fallthroughs.py` chains 239 stream3 functions into the function below them, as a step in `tools/regen.py`. 7 open-ended functions are reported and left alone; 3 of those are a new silent problem (a dropped delay slot).** Nothing was compiled or run as a game.
+
+**How it decides (from the MIPS code, not the C)**
+- `syms/dump.toml` gives each function's address and size, the decompressed ROM gives its instructions. The tool follows the branches from the function's first instruction. If that reaches the address just past the end, the function "falls".
+- "Falls (unseen entry)": the last stretch of code is not closed by a jump, but nothing inside the function leads to it. It is dead code or entered through a table the tracer could not follow. It gets the same fix: harmless if dead, needed if not.
+- Trailing all-zero words after a closing jump are padding, not a fall-through.
+- The C is only read to find where each function's body ends (`;}`) and whether a function has a body at all.
+
+**The fix:** three lines before the closing `;}`, the same call-then-return N64Recomp writes for a branch into another function's start:
+
+```c
+     // 0x801AE1FC: subu        $s7, $s7, $t8
+     ctx->r23 = SUB32(ctx->r23, ctx->r24);
++    // falls into func_801AE200_stream3, added by tools/fix_fallthroughs.py
++    func_801AE200_stream3(rdram, ctx);
++    return;
+ ;}
+```
+
+**The run** (`python3 tools/regen.py`, exit 0, 1442 functions, `__osGetCause_recomp` still 0)
+
+| Item | Result |
+| --- | --- |
+| Fixed | **239**, all in stream3: 206 "falls", 33 "falls (unseen entry)" |
+| Compared with plain N64Recomp output (scratch folder) | 717 lines added (239 x 3), 0 removed, 13 files |
+| Second run of the script alone | "fixed: 0, already fixed: 239", every file's checksum identical |
+| boot, stream1, stream2 | nothing to fix. Compiled code does not fall through |
+| Calls to names with no body | unchanged: 275 calls, 55 names |
+
+- **239, not the 243 from session 2b.** 2b's method was a throwaway and is not recorded. 239 plus the 4 "branch at end" functions below is 243, which is my best guess at the difference. Not verifiable.
+
+**Left alone (7), reported by the script on every run**
+
+| Function | Why |
+| --- | --- |
+| `__osCleanupThread` (boot) | No body in the C: N64Recomp skips it (ignored list). Its last call, `osDestroyThread`, never returns anyway |
+| `func_801BFFF0_stream3` | Ends on `bnel` at `0x801C0004`. Its delay slot is the first instruction of the next function, and it is a real instruction |
+| `func_801C0150_stream3` | Same: `bnel` at `0x801C01FC`, real instruction in the delay slot |
+| `func_801C0BF4_stream3` | Ends on `jr ra` at `0x801C0E38`. The delay slot at `0x801C0E3C` is `addiu sp, sp, 0x10` |
+| `func_801C3C1C_stream3` | Ends on `jr ra` at `0x801C3FD8`. The delay slot is a nop: harmless |
+| `func_801C0E3C_stream3` | One instruction (the delay slot above), followed by the table at `0x801C0E40`, not a function |
+| `func_801C3FDC_stream3` | One nop (the delay slot above), at the end of stream3's code |
+
+- **New problem found: a function boundary between a branch and its delay slot.** In the first three, N64Recomp drops the delay slot instruction. For `func_801C0BF4_stream3` that means the stack pointer is not restored on return. For the two `bnel` cases the taken path misses one instruction, and the not-taken path should carry on at the second instruction of the next function, which a plain call cannot express. Not fixed here. The likely place for a fix is the function split (`tools/stream3_map.py` should not start a function on a delay slot that is only reached through its branch), but why the tracer made these starts was not looked at.
+
+**Done**
+- `tools/fix_fallthroughs.py` and `tools/test_fix_fallthroughs.py`: known-answer test on a made-up program of 15 functions in two overlapping sections, 27 of 27 checks pass. It covers each way of falling through, padding, `b`, the left-alone cases, the exact fixed text, and that a second run changes nothing.
+- `tools/regen.py`: now 6 steps. Step 5 is "Cleanup", where later cleanup scripts also go.
+- All 6 tool tests pass.
+
+**Stuck / unknown**
+- The 3 dropped delay slots above.
+- The fix is only correct if the function below ends with a normal return (same condition as N64Recomp's own call-then-return). Chains of fall-throughs become nested calls.
+- The 33 "unseen entry" fixes sit after code the C cannot reach today. They matter only once the table dispatch (the 5 jump-table stubs) is fixed.
+- Only the running game proves any of this (ground rule 1).
+
+**Next**
+- Phase 2 checklist: RSPRecomp config for the audio microcode, then the project skeleton and first link (TLB functions start there, see the entry below).
+- Decision for BlackCRT and the coach: fix the 3 dropped delay slots now (small, in the tracer or as a second cleanup script), or when the game reaches them. My suggestion: now-ish, before the first run, because a wrong stack pointer is hard to trace from a crash.
+
+## 2026-10-10: What the game maps through the TLB (Phase 2, task 3b, read-only)
+
+**Result: a blocker for gameplay, but a known pattern with a fix.** The game maps per-fighter data blocks at low virtual addresses. N64Recomp and N64ModernRuntime have no TLB support, so the first read of a mapped address will crash (a clean access violation, not silent corruption). Other recomps have solved this in their own runtime code. Read-only task: nothing was changed.
+
+**Decision (BlackCRT and the coach):** the TLB work happens with the project skeleton and first link. Start with `osMapTLB_recomp` and `osUnmapTLB_recomp` versions that log their arguments, then add real mapping.
+
+**Call sites** (all 4 KB pages, ASID -1 meaning global)
+
+| Call | In | TLB slot | Virtual | Physical |
+| --- | --- | --- | --- | --- |
+| `osUnmapTLB` at `0x8001CF84` | `func_8001CF5C` | 0 to 30, in a loop | clears all | |
+| `osMapTLB` at `0x8001CFBC` | `func_8001CF5C` | 0 | `0x00000000` (one page) | `0x3A4000`, odd page unmapped |
+| `osMapTLB` at `0x8001D010` | `func_8001CF5C` | 1 to 5 | `(P1 byte + 1) * 0x10000`, 40 KB | `0x1DB000` to `0x1E4FFF` |
+| `osMapTLB` at `0x8001D07C` | `func_8001CF5C` | 6 to 10 | `(P2 byte + 1) * 0x10000`, 40 KB | `0x1E5000` to `0x1EEFFF` |
+| `osUnmapTLB` at `0x801C5808` | `func_801C57B0_stream2` | 0 | | |
+| `osMapTLB` at `0x801C5850` | `func_801C57B0_stream2` | 0 | `0x00000000` (one page) | a buffer passed in, rounded up to a page |
+
+- The two bytes are at `0x8004E98C` and `0x8004E98D`, one per player. The P2 mapping is skipped when both are equal.
+- `func_80012198` fills the two physical slots: it inflates ROM table entry 3 + byte to `0x801DB000` (P1) and `0x801E5000` (P2). The table is the stream table at ROM `0x7DE0`; it has 27 entries.
+- Entries 3 to 13 are 11 blocks of 20 to 35 KB. Each holds 580 to 1166 words that point into its own window (entry 3 into `0x0001xxxx`, entry 4 into `0x0002xxxx`, and so on). So they are per-fighter data linked at a fixed low address. "Per fighter" is my reading of 11 blocks picked by a per-player byte, not proven.
+- So the mapped range is page 0 plus `0x00010000` to `0x000BA000`, all inside the low half that a recomp cannot treat as plain RAM.
+
+**Code or data? Data only, as far as static reading shows.** The 11 blocks contain no `jr ra` at all; of the 27 table entries only the three code streams do. A `jal` from `0x80xxxxxx` cannot reach low addresses.
+
+**Tool support (read from source)**
+- N64Recomp: none. Its README says relocation support for TLB mapping "is coming in the future". `osMapTLB` and `osUnmapTLB` are on its ignored list, so no body is written.
+- N64ModernRuntime (commit `cdf5abb`): no `osMapTLB_recomp` or `osUnmapTLB_recomp`, so the link fails until we supply them. `osUnmapTLBAll_recomp` is an empty stub with a TODO; `osVirtualToPhysical` has "TODO handle TLB mappings".
+- Why it crashes: recompiled code turns address A into `rdram + (A - 0x80000000)`. The runtime reserves 4 GB (`allocation_size`) but only the first 512 MB (`mem_size`) is usable. `0x00010000` lands 2 GB in, on a no-access page.
+
+**References**
+- Gauntlet Legends recomp, `src/tlb.cpp` (github.com/Auxnon/gauntlet-legends-recomp): the closest match. It implements both functions and has the host OS map the same physical pages at the virtual address, so both addresses share memory with no per-access cost. The code read is Linux only (`mmap`).
+- BM64TSARecomp, `src/game/tlb.cpp` (github.com/RevoSucks/BM64TSARecomp): records the mappings in a table.
+- Goemon, Castlevania and two GoldenEye recomps also declare their own `osMapTLB_recomp`. Not read.
+
+**Open questions**
+- Windows mapping alignment: the Windows equivalent of `mmap` normally works in 64 KB steps, and the physical slots at `0x1DB000` and `0x1E5000` are not 64 KB aligned. Whether the newer Windows calls allow 4 KB steps here is unchecked.
+- Whether a copy approach is safe (copy the block to the virtual address instead of sharing it). Only if the game never touches the same data through both addresses.
+- `osVirtualToPhysical` (36 calls) gives a wrong answer for a mapped address. Not checked whether the game ever passes one.
+- What the page at virtual 0 is for, and which functions follow the low pointers.
+
 ## 2026-10-10: Real recomp config and one-command regeneration (Phase 2, task 3)
 
 **Result: `kigold.toml` is in the repo with 12 stubs, `python3 tools/regen.py` regenerates the C in one command, and the `__osGetCause_recomp` count is 0.** Nothing was compiled or run as a game.

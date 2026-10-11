@@ -71,6 +71,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `tools/scan_rom.py` | Recon scan for microcode and Rare compression |
 | `tools/unpack_rom.py` | Builds the decompressed ROM for splat and N64Recomp (output in `build/`, never committed) |
 | `kigold.toml` | N64Recomp config: ROM, symbol file, output folder, and the stub list with a reason for each |
-| `tools/regen.py` | Regenerates `RecompiledFuncs/` in one command (unpack check, split, symbols, N64Recomp, report) |
+| `tools/regen.py` | Regenerates `RecompiledFuncs/` in one command (unpack check, split, symbols, N64Recomp, cleanup, report) |
+| `tools/fix_fallthroughs.py` | Cleanup step: chains functions that fall through into the next one. Run by `regen.py` |
 | `requirements.txt` | Python tools for recon (splat), installed into `disasm/.venv` |
 | `.gitattributes` | Keeps line endings consistent between Ubuntu and Windows |
