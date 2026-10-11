@@ -48,7 +48,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 
 ### Phase 0 checklist (done 2026-10-08)
 
-- [x] Follow `docs/SETUP.md` on the Windows PC (Parts 1, 3, 4, 5 done; Part 2, the Windows build tools, is deferred to the start of Phase 2 as planned)
+- [x] Follow `docs/SETUP.md` on the Windows PC (Parts 1, 3, 4, 5 done; Part 2, the Windows build tools, was deferred to the start of Phase 2 as planned and done 2026-10-10)
 - [x] Create the private GitHub repo (done 2026-10-08)
 - [x] Guard hook on, and it blocks a test commit of the ROM (blocked a forced ROM commit with 6 reasons; the GitHub Actions guard also passed)
 - [x] `python3 tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
@@ -98,7 +98,7 @@ Smaller open items: 1,344 bytes of stream3 code in 144 pieces that nothing reach
 
 **Suggested order for the first Phase 2 tasks**
 
-1. Windows build tools (`docs/SETUP.md` Part 2, deferred from Phase 0).
+1. Windows build tools (`docs/SETUP.md` Part 2, deferred from Phase 0). **Done 2026-10-10.**
 2. Name the 3 callers of `__osGetCause`. Cheap, and it may close the link question.
 3. Real recomp config in the repo (replaces the throwaway ones in `build/`), with the 9 stubs listed and a reason for each.
 4. Fall-through cleanup script and its test. First, because it is the one silent problem.

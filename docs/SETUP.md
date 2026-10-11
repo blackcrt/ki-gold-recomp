@@ -45,6 +45,13 @@ In **PowerShell on Windows** (not Ubuntu). It's a large download (several GB) an
 winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended"
 ```
 
+**If `winget` is missing** (this happened during the original setup), download the Build Tools installer from Microsoft and run it with the same components:
+
+```powershell
+Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "$env:TEMP\vs_BuildTools.exe"
+& "$env:TEMP\vs_BuildTools.exe" --passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended
+```
+
 Then turn on long file paths, since the runtime libraries we'll pull in later are nested deeply. In **PowerShell as administrator**:
 
 ```powershell
@@ -52,6 +59,19 @@ New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name
 ```
 
 **Check:** open **Developer PowerShell for VS 2022** from the Start menu and run `clang-cl --version`, `cmake --version`, and `ninja --version`. All three should print a version.
+
+**x64 note:** the Start menu Developer PowerShell defaults to 32-bit, so `clang-cl --version` shows `Target: i686-pc-windows-msvc` there. That is normal, but the game build must be 64-bit. Load the x64 environment instead, which is what our build scripts will do:
+
+```powershell
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+$vs = & $vswhere -products * -latest -property installationPath
+& (Join-Path $vs "Common7\Tools\Launch-VsDevShell.ps1") -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+clang-cl --version
+```
+
+`vswhere` finds where Build Tools is installed (`-products *` is needed because Build Tools is not a full Visual Studio). `clang-cl` should now show `Target: x86_64-pc-windows-msvc`.
+
+Verified on the build PC (2026-10-10): clang-cl 19.1.5, cmake 3.31.6-msvc6, ninja 1.12.1.
 
 ---
 

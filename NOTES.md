@@ -2,6 +2,26 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Windows build tools installed and checked (Phase 2, task 1)
+
+**Result: the Windows build tools work, and the x64 environment loads from Ubuntu.** Docs only; nothing was built.
+
+**Done**
+- BlackCRT installed Visual Studio Build Tools 2022 on Windows. `winget` was missing, so BlackCRT ran `vs_BuildTools.exe` from `aka.ms/vs/17/release` directly with the same `--add` components as `docs/SETUP.md` Part 2. `vswhere` shows the install complete with the Clang component. `LongPathsEnabled` is 1.
+- Checked from Ubuntu through `powershell.exe`: found the install with `vswhere`, loaded `Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64`, printed the versions.
+  - Install path: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools` (Developer PowerShell v17.14.41)
+  - clang-cl 19.1.5, `Target: x86_64-pc-windows-msvc`
+  - cmake 3.31.6-msvc6
+  - ninja 1.12.1
+- The Start menu Developer PowerShell defaults to 32-bit (`Target: i686`). Build scripts must load the x64 environment as above.
+- `docs/SETUP.md` Part 2 now has the winget fallback and the x64 note. `PLAN.md` marks Phase 2 task 1 done.
+
+**Stuck / unknown**
+- Nothing. No compile was tried yet, so this proves the tools start, not that they build the game.
+
+**Next**
+- Phase 2, task 2: name the 3 callers of `__osGetCause` (`func_80005D98`, `func_80005E58`, `func_80006190`).
+
 ## 2026-10-10: Phase 1 go/no-go, go for Phase 2 (session 2, task 4)
 
 **Result: GO for Phase 2, approved by BlackCRT.** Phase 1 is done. The full write-up (verdict per part, risks, first Phase 2 tasks) is in `PLAN.md` under "Phase 1 go/no-go". Docs only; no tool, config or symbol changes.
