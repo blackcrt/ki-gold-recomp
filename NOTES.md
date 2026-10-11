@@ -2,6 +2,58 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: stream3 mapped by tracing, and a trial N64Recomp run (session 2, tasks 2a and 2b)
+
+Read-only for `disasm/`, `syms/` and `tools/`. Everything lives in `build/` (git-ignored): the tracer `build/stream3_map.py`, its report `build/stream3_map_report.txt`, the function list `build/stream3_funcs.txt`, and the trial run in `build/s3test/`.
+
+**2a: the map**
+- **Method:** recursive descent with rabbitizer from known entry points. Weak seeds (stored pointers, splat labels) are accepted only if everything they lead to decodes cleanly; otherwise they are rolled back and counted as data pointers. A word that is itself a stream3 code address is never treated as an instruction.
+- **Ways in from outside: two, both from stream1.** `0x801AD900` (called at 0x8000FEF0) and `0x801AE460` (called at 0x800119DC). Boot has none. Stream2 shares the same RAM so it cannot call stream3. Stream3 itself makes **no calls to anything outside itself**.
+- Those two entries reach 68,888 bytes with zero decode failures. Stored code addresses add 17,576 bytes (209 distinct targets in stream3's data area, plus tables between routines). splat's labels added only 44 bytes; 20 of its 30 raw-block labels and one entry label (`0x801B5B64`, a 17-entry address table) sit on data.
+- **Code vs data** (code area is 92,000 bytes):
+
+| What | Bytes | Share |
+| --- | --- | --- |
+| Code reached by tracing | 86,508 | 94.0% |
+| Valid code nothing reaches (145 small pieces the game jumps over) | 1,300 | 1.4% |
+| Data, 31 regions (address tables, lookup tables of bytes and 16-bit values, one big record table at `0x801BB0B4`) | 4,192 | 4.6% |
+
+- **Routines:** 330 (146 entered by `jal`, 174 only through stored addresses, 10 that follow an inline table). 246 have branches leaving them, 242 of those into the middle of another routine; 43 fall through into the next. One web of linked routines holds most of the code (about 57 KB); 43 routines stand alone.
+- **Not normal calling rules:** 8 indirect jumps through ordinary registers, no `jalr`. `0x801B1F30` is just `jr $t2` (a hand-made call), `0x801BA7F0` jumps through `$s1`.
+- **splat's 30 raw blocks:** 3 all code, 9 mostly code with tables inside, 18 pure data.
+- **`0x801AE460`:** stream3's second public entry, running to `0x801AE7A4`. Interrupts off through Status, every register saved on a 0x80 frame, work, restore, interrupts on, returns the byte at `0x801D8876`. Not named; no evidence for a name yet.
+- **CPU registers:** Count is read at `0x801B658C` (routine `0x801B6578`) and `0x801B925C`. No Cause reads. Status only in the two entry routines (N64Recomp supports Status).
+- 223 floating-point instructions in stream3.
+
+**2b: trial N64Recomp run on the traced split**
+- Rule for the split: a function is one unbroken run of code, and anything entered from outside it is a function start. Applying that until nothing changes gives **613 functions** (330 routines plus 283 extra entry points), 87,808 bytes, no data inside any function.
+- Throwaway symbol file `build/s3test/dump.toml`: boot, stream1, stream2 copied from `syms/dump.toml`, stream3 replaced by the 613. N64Recomp reads it ("Function count: 1442") and **finishes with exit 0 after 9 reruns**, no warnings.
+- **605 of 613 stream3 functions translate.** The 8 that needed a stub:
+
+| Reason | Count | Functions |
+| --- | --- | --- |
+| "Failed to determine size of jump table" (hand-written table dispatch) | 5 | `801AFD44`, `801AFE98`, `801BCC84`, `801C0B5C`, `801C0BB4` |
+| Reads Count | 2 | `801B6578`, `801B8F00` |
+| "Negative offset for lw from stack" | 1 | `801AE6B4` (the tail of the `0x801AE460` entry) |
+
+- Outside stream3 the same two as session 7 still need stubs: `func_800064F0` (Cause) and `func_80030EF0` (branch to the entry label 0x80031028). `func_80011824` now translates, because `0x801AE460` exists.
+- **What N64Recomp generates:**
+  - Branch to another function's start: a call followed by `return;` (930 of these in stream3: 403 forward, 527 backward). Correct as long as the callee ends with a normal return.
+  - Backward branch into another function: exactly the same, call then `return;`. A loop that crosses functions therefore becomes recursion. 169 functions sit in 14 such loop groups, the largest with 95 functions (the main dispatcher at `0x801AFD7C` and its handlers).
+  - **Fall-through into the next function: nothing.** The C function simply ends, so execution returns to the caller instead of carrying on. No warning. 243 functions end this way. This is a silent miscompile and must be fixed by a cleanup step.
+- Earlier wrong numbers, now corrected: the first 2a report said 29 data regions / 329 routines / 604 functions. Two tracer bugs caused that (an instruction first seen as a delay slot was not followed; two small lookup tables that decode as instructions were counted as code).
+
+**Stuck / unknown**
+- Nothing was compiled or run; ground rule 1 still applies. "Translates" only means N64Recomp produced C.
+- The 145 never-reached code pieces may be dead, or may have entries the trace cannot see.
+- Whether clang-cl turns "call then return" into a real jump (so cross-function loops do not grow the stack) is untested.
+- What stream3 does in the game is still unknown.
+
+**Next (needs a decision)**
+- **Option A, WM2K style, looks workable:** traced function list in the symbol file, a cleanup script that chains the 243 fall-throughs into the next function, a way to keep cross-function loops from growing the stack, and hand fixes for the 8 stubbed functions.
+- **Option B, treat stream3 as one unit** (custom translation or a small interpreter behind its two entry points): possible because stream3 calls nothing outside itself, but it needs floating point too and cannot be tested until the Phase 2 runtime exists. Keep as the fallback.
+- First steps if A: turn the tracer into a real tool with a known-answer test, add the 31 data regions to `disasm/kigold.yaml`, and let `gen_symbols.py` take stream3's functions from the trace.
+
 ## 2026-10-08: Symbol file for N64Recomp (session 7)
 
 **Done**
