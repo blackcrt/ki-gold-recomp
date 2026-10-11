@@ -1,0 +1,57 @@
+# N64Recomp config for Killer Instinct Gold (US V1.2).
+# Turns the game's MIPS code into C in RecompiledFuncs/ (generated, never committed).
+#
+# Run it with:  python3 tools/regen.py
+# Do not run N64Recomp by hand: the ROM, the split and the symbol file must be
+# fresh first, and regen.py does those steps in order.
+#
+# Format checked against N64Recomp's src/config.cpp. Paths are relative to this file.
+
+[input]
+# First instruction the game runs, the start of the boot segment.
+entrypoint = 0x80000400
+# Decompressed ROM written by tools/unpack_rom.py. Game data, never committed.
+rom_file_path = "build/kigold.decompressed.z64"
+# Function names, addresses and sizes, written by tools/gen_symbols.py.
+symbols_file_path = "syms/dump.toml"
+output_func_path = "RecompiledFuncs"
+
+[patches]
+# A stubbed function gets an empty body: calling it does nothing.
+# Every stub here is a known gap, not a fix. Each needs a real answer before
+# the game can rely on that function. Reasons marked "N64Recomp:" are the
+# error it prints when the stub is removed (checked 2026-10-10).
+stubs = [
+    # ---- stream1 ----
+    # N64Recomp: "Unhandled branch in func_80030EF0 at 0x80030F58 to 0x80031028".
+    # It branches out of itself to a label inside another function.
+    "func_80030EF0",
+
+    # ---- stream3 (hand-written assembly, option A in PLAN.md) ----
+    # N64Recomp: "Negative offset for lw from stack: -24584".
+    # This is the tail of the stream3 entry at 0x801AE460.
+    "func_801AE6B4_stream3",
+
+    # N64Recomp: "Failed to determine size of jump table" for the next five.
+    # They jump through hand-made address tables (table address in brackets).
+    "func_801AFD44_stream3", # [0x801C52A4]
+    "func_801AFE98_stream3", # [0x801B5B64]
+    "func_801BCC84_stream3", # [0x801C4604]
+    "func_801C0B5C_stream3", # [0x801C0E3C]
+    "func_801C0BB4_stream3", # [0x801C0F08]
+
+    # N64Recomp: "Unhandled cop0 register in mfc0: 9" for the next two.
+    # They read the CPU's Count register (a hardware timer).
+    "func_801B6578_stream3",
+    "func_801B8F00_stream3",
+
+    # ---- boot: libultra debug link, stubbed by choice ----
+    # N64Recomp can translate these three. They are stubbed because they talk
+    # to a development kit at 0xC0000000 that a retail console does not have,
+    # and they call __osGetCause, which N64Recomp skips and gives no body.
+    # Stubbing them removes those calls. See NOTES.md, 2026-10-10, task 2.
+    # Assumption, not proven until the game runs: retail code never needs them.
+    "__osSyncPutChars", # proven name; nothing in the game calls it
+    "func_80005D98",    # unnamed (lead: send_packet); writes a packet, waits on Cause
+    "func_80005E58",    # unnamed (lead: send); calls func_80005D98 3 bytes at a time
+]

@@ -2,6 +2,65 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Real recomp config and one-command regeneration (Phase 2, task 3)
+
+**Result: `kigold.toml` is in the repo with 12 stubs, `python3 tools/regen.py` regenerates the C in one command, and the `__osGetCause_recomp` count is 0.** Nothing was compiled or run as a game.
+
+**Decisions from task 2 (BlackCRT and the coach):** `__osSyncPutChars` stays named. `func_80005D98` and `func_80005E58` stay unnamed.
+
+**Done**
+- **`kigold.toml`** at the repo root (WM2K's naming style). Format read from N64Recomp's `src/config.cpp`: `[input]` with `entrypoint = 0x80000400`, `rom_file_path = "build/kigold.decompressed.z64"`, `symbols_file_path = "syms/dump.toml"`, `output_func_path = "RecompiledFuncs"`, and `[patches]` with the `stubs` list. Paths are relative to the config file.
+- **12 stubs, each with a comment.** The reasons for the 9 old ones are the errors N64Recomp prints, re-checked by removing one stub at a time in a scratch folder (9 runs, each exit 1 on that function):
+
+| Stub | Reason |
+| --- | --- |
+| `func_80030EF0` | "Unhandled branch in func_80030EF0 at 0x80030F58 to 0x80031028" |
+| `func_801AE6B4_stream3` | "Negative offset for lw from stack: -24584" |
+| `func_801AFD44_stream3`, `func_801AFE98_stream3`, `func_801BCC84_stream3`, `func_801C0B5C_stream3`, `func_801C0BB4_stream3` | "Failed to determine size of jump table" (tables at `0x801C52A4`, `0x801B5B64`, `0x801C4604`, `0x801C0E3C`, `0x801C0F08`) |
+| `func_801B6578_stream3`, `func_801B8F00_stream3` | "Unhandled cop0 register in mfc0: 9" (Count) |
+| `__osSyncPutChars`, `func_80005D98`, `func_80005E58` | Debug link code, stubbed by choice. N64Recomp translates all three without a stub (3 runs, exit 0) |
+
+- **`tools/regen.py`**, five steps in order: unpack check (the decompressed ROM must match the SHA1 in `disasm/kigold.yaml`, else `tools/unpack_rom.py` rebuilds it), splat split (full output to `build/split.log`), `tools/gen_symbols.py`, N64Recomp (into an emptied `RecompiledFuncs/`), and a report. It stops at the first step that fails. Cleanup scripts will go between the last two steps when they exist.
+- **Guard and `.gitignore` tested.** `git add RecompiledFuncs/funcs.h` is refused (`.gitignore` line 10). Forced in with `git add -f`, the pre-commit hook blocks it: "this folder only holds generated or extracted output", exit 1. Unstaged again with `git restore --staged`. No guard or `.gitignore` change was needed.
+
+**The run**
+
+| Item | Result |
+| --- | --- |
+| `tools/regen.py` exit code | 0 (N64Recomp exit 0, splat exit 0) |
+| "Function count" | 1442 |
+| Output | 30 files, 11 MB: `funcs.h`, `funcs_0.c` to `funcs_26.c`, `lookup.cpp`, `recomp_overlays.inl`. 1330 function bodies (1442 minus the 112 that N64Recomp ignores) |
+| `__osGetCause_recomp` calls | **0** (was 6) |
+| Calls to `*_recomp` names with no body | 275 calls to 55 names |
+| Tracked files after the run | unchanged (`syms/dump.toml` comes out identical) |
+
+- **46 of the 55 names are on N64Recomp's `reimplemented_funcs` list**, which is the list of functions the runtime is expected to provide (`osRecvMesg`, `osCreateThread`, `osViSwapBuffer` and so on). 232 calls.
+- **9 names are only on its `ignored_funcs` list: 43 calls, and this is the same kind of link question `__osGetCause` was.** N64Recomp writes no body for them and nothing says the runtime has one:
+
+| Name | Calls | Called from |
+| --- | --- | --- |
+| `__osSiRawStartDma` | 8 | `func_80034020`, `func_800343F4`, `func_8003BF10`, `func_8003C2A0` |
+| `__osSiRelAccess` | 6 | `func_80034020`, `func_80034350`, `func_8003BF10`, `func_8003C2A0` |
+| `__osSiGetAccess` | 4 | the same four |
+| `__osContDataCrc` | 4 | `func_8003BF10`, `func_8003C2A0`, `func_801CD08C_stream2`, `func_801CD1C4_stream2` |
+| `__osContAddressCrc` | 2 | `func_8003C13C`, `func_8003C4C4` |
+| `__ull_rshift` | 7 | `func_801BE3CC_stream2`, `func_801C9D78_stream2`, `func_801C9EE4_stream2` |
+| `__ll_lshift` | 6 | `func_801BE240_stream2`, `func_801C9D78_stream2`, `func_801C9EE4_stream2` |
+| `osMapTLB` | 4 | `func_8001CF5C`, `func_801C57B0_stream2` |
+| `osUnmapTLB` | 2 | `func_8001CF5C`, `func_801C57B0_stream2` |
+
+- The callers of the first five look like unnamed libultra controller and pak code (leads only, nothing named). If so, naming them would make the calls disappear the way they do for other libultra internals. `__ull_rshift` and `__ll_lshift` are 64-bit math helpers called from game code in stream2. `osMapTLB` and `osUnmapTLB` are called from game code: the game maps memory through the TLB, which the recomp runtime does not emulate.
+
+**Stuck / unknown**
+- The 9 names above. Not looked at beyond the caller list.
+- Whether the runtime really provides all 46 "reimplemented" names is unchecked. The runtime is not in the repo yet; the first link will tell.
+- Stubbing the debug link still rests on the assumption that retail code never needs it (see the entry below).
+- The stubs are gaps, not fixes: 9 functions currently do nothing.
+
+**Next**
+- Phase 2 checklist: the fall-through cleanup script and its test.
+- Decision for BlackCRT and the coach: look at the 9 unprovided names now (naming the controller code may remove 5 of them), or wait for the first link to list everything that is missing at once. My suggestion: wait for the link, but keep `osMapTLB` in mind as the one that could need real work.
+
 ## 2026-10-10: The three callers of `__osGetCause` (Phase 2, task 2)
 
 **Result: one of the three is proven and named, `__osSyncPutChars` at 0x80006190. The other two are identified in kind but not proven, so they stay unnamed. Naming does not remove the 6 `__osGetCause_recomp` calls; stubs in the recomp config will.**
