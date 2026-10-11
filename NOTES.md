@@ -2,6 +2,64 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: The three callers of `__osGetCause` (Phase 2, task 2)
+
+**Result: one of the three is proven and named, `__osSyncPutChars` at 0x80006190. The other two are identified in kind but not proven, so they stay unnamed. Naming does not remove the 6 `__osGetCause_recomp` calls; stubs in the recomp config will.**
+
+**What the three are**
+
+All three belong to libultra's debug link (the "rdb" port a development kit listens on, at `0xC0000000`). Each writes a packet there, then polls `__osGetCause` until Cause bit `0x2000` (interrupt 6) is set, then clears it by writing `0xC000000C`. A retail console has nothing on that port.
+
+| Function | Verdict | Evidence |
+| --- | --- | --- |
+| `func_80006190` | **Named `__osSyncPutChars`** | Same length as the reference (72 instr) in `ultralib_2.0I` and `ultralib_2.0I_rom` `os/syncputchars.o`. Not exact: 68 words identical, 4 differ only in a constant with the same instruction and registers, all in how the packet header bits are packed (version I has a 6-bit type, the game a 2-bit one). Callee rule: all 6 calls agree in position and name (`__osAtomicDec` x2, `__osDisableInt`, `__osGetCause` x2, `__osRestoreInt`). `0x80007064` is used at the 4 places the reference uses `__osRdbWriteOK` and starts at 1 like it. Single candidate: the next closest function of that length differs in 69 words |
+| `func_80005D98` | **Not named.** Lead: `send_packet` | No exact match, and none is possible with our references (see below). It builds a packet, writes it to `0xC0000000` and waits for interrupt 6 |
+| `func_80005E58` | **Not named.** Lead: `send` | No exact match. It calls `func_80005D98` in pieces of 3 bytes, which is what the reference `send` does with `send_packet` |
+
+- **Why the two cannot be proven.** They are file-local (static) functions in `kdebugserver.c`. The game's copy of that file is an older version than version I: seven functions at `0x80005D10` to `0x80006184` with a three-state command reader, where version I has five and a `send_packet` that never reads Cause. The GoldenEye reference has an empty `kdebugserver`. So there is nothing to match against, and static functions have no symbol in the reference objects anyway (which is also why the fingerprint tool never listed them). The names would rest on resemblance and on N64Recomp's list, which is not the session 5 standard.
+- **Lead, not named:** `func_80005FA8` is the file's main function (`kdebugserver` in the reference). Its only caller is `__osException` at `0x80003F84`, at the spot where version I calls `kdebugserver` (right after the thread state is set to runnable, followed by a branch to the dispatcher). The code around the call differs between versions.
+- **Nothing calls `__osSyncPutChars`.** No call and no pointer to `0x80006190` anywhere in the split. It looks like dead code. Not proven at run time.
+
+**N64Recomp lists**
+
+| Name | reimplemented | ignored | renamed |
+| --- | --- | --- | --- |
+| `__osSyncPutChars` | no | no | no |
+| `send_packet`, `send` (leads) | no | yes ("kdebugserver" block: `string_to_u32`, `send_packet`, `clear_IP6`, `send`, `kdebugserver`) | no |
+
+Coverage is unchanged: `reimplemented_funcs` 55 of 116, `ignored_funcs` 112 of 358, `renamed_funcs` 6 of 83.
+
+**Does naming remove the 6 calls? No.** Tested with N64Recomp in a scratch folder outside the repo. Every run: exit 0, "Function count: 1442", same 9 real stubs.
+
+| Run | `__osGetCause_recomp` calls | Side effect |
+| --- | --- | --- |
+| Before (old symbol file) | 6 | |
+| A: real symbol file, `__osSyncPutChars` named | 6 | None. It is on no list, so it is translated as before |
+| B: trial copy, plus `send_packet` and `send` | 2 (both in `__osSyncPutChars`) | 2 new calls to `send_recomp` with no body, from `func_80005F30` and `func_80005F7C` |
+| C: trial copy, plus `string_to_u32` and `kdebugserver` | 2 | plus 2 calls to `string_to_u32_recomp` with no body |
+| D: real symbol file, `__osSyncPutChars` stubbed in the config | 4 (the two unnamed ones) | None |
+
+- Naming moves the problem instead of closing it: the game's old `kdebugserver.c` has two functions (`func_80005F30`, `func_80005F7C`) that are not on N64Recomp's list, and they keep calling the ignored ones.
+- **A stub does close it** (run D): a stubbed function gets an empty body, so its calls vanish and nothing dangles. Stubbing `__osSyncPutChars`, `func_80005D98` and `func_80005E58` in the recomp config should bring the count to 0. Only D was run; the three together were not.
+- The trial names in B and C were only in scratch copies of the symbol file. They are not in the repo.
+
+**Done**
+- `disasm/symbol_addrs.txt`: `__osSyncPutChars = 0x80006190` with its evidence, in the hand-found block.
+- Re-ran the split (exit 0, no warnings or errors) and `tools/gen_symbols.py`: `syms/dump.toml` changed by one line, 1442 functions, boot named 91 (was 90), 252 names in total.
+- Tool tests: 5 of 5 pass.
+- `docs/SETUP.md` Part 2: the fallback now uses `Start-Process ... -Wait -PassThru`, as BlackCRT actually ran it, with the note that `ExitCode` can be blank in PowerShell 5 and `vswhere` is the reliable check.
+- `PLAN.md`: Phase 2 order is now a checklist, tasks 1 and 2 ticked, status line says Phase 2 in progress, link question row updated.
+
+**Stuck / unknown**
+- `__osSyncPutChars` is named without an exact match. It follows the session 5 precedent (`__osEnqueueAndYield`, 34 of 35 identical plus call evidence), but it is a judgement call. Easy to revert: one line in `disasm/symbol_addrs.txt`.
+- Whether the runtime provides `__osGetCause_recomp` was still not checked. With the stubs it should not matter.
+- Stubbing the debug link assumes the game never needs it. That fits a retail cartridge, but only the running game proves it (ground rule 1). `__osException` calls `func_80005FA8` only when the word at `0x80006F94` is not zero; what sets it was not checked.
+- Nothing was compiled or run.
+
+**Next**
+- Phase 2, task 3: the real recomp config. List the 9 stubs with reasons, and add `__osSyncPutChars`, `func_80005D98` and `func_80005E58` as stubs (debug link, never reached on retail hardware). Then confirm the `__osGetCause_recomp` count is 0.
+- Decision for BlackCRT and the coach: keep `func_80005D98` and `func_80005E58` unnamed (my recommendation), or accept `send_packet` and `send` as "likely" names on weaker evidence.
+
 ## 2026-10-10: Windows build tools installed and checked (Phase 2, task 1)
 
 **Result: the Windows build tools work, and the x64 environment loads from Ubuntu.** Docs only; nothing was built.

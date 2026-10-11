@@ -521,6 +521,8 @@ __osCleanupThread = 0x80004608; // type:func
 osAiGetLength = 0x80039990; // type:func
 // evidence (by hand, re-checked 2026-10-10): exact match with __osGetCause only (2 instr: mfc0 $v0, Cause, then jr $ra) in ultralib_2.0I and ultralib_2.0I_rom os/getcause.o; no other reference object contains that pair. 6 calls, two each from func_80005D98, func_80005E58 and func_80006190 (all unnamed, so no caller confirms the name)
 __osGetCause = 0x800064F0; // type:func
+// evidence (by hand, 2026-10-10): same length as __osSyncPutChars (72 instr) in ultralib_2.0I and ultralib_2.0I_rom os/syncputchars.o, not an exact match: 68 words identical, 4 differ only in a constant (same instruction and registers), all in the packet header bit packing (older rdb packet layout). All 6 calls agree in position and name (__osAtomicDec twice, __osDisableInt, __osGetCause twice, __osRestoreInt), and 0x80007064 is used at the 4 places the reference uses __osRdbWriteOK and starts at 1 like it. Single candidate: the next closest reference function of this length differs in 69 words. Nothing in the split calls it
+__osSyncPutChars = 0x80006190; // type:func
 
 // stream3 routine starts, found by tracing the code (tools/stream3_map.py --symbols).
 // These are splat's default names: they mark where routines start and claim no meaning.

@@ -120,7 +120,7 @@ functions = [
     { name = "func_80005F30", vram = 0x80005F30, size = 0x4C },
     { name = "func_80005F7C", vram = 0x80005F7C, size = 0x2C },
     { name = "func_80005FA8", vram = 0x80005FA8, size = 0x1DC },
-    { name = "func_80006190", vram = 0x80006190, size = 0x124 },
+    { name = "__osSyncPutChars", vram = 0x80006190, size = 0x124 },
     { name = "osSetIntMask", vram = 0x800062C0, size = 0x60 },
     { name = "osDestroyThread", vram = 0x80006320, size = 0xF8 },
     { name = "__osSetCompare", vram = 0x80006420, size = 0xC },

@@ -1,6 +1,6 @@
 # KI Gold Recomp: Project Plan
 
-**Status:** Phase 1 done (2026-10-10), go for Phase 2. Phase 2 (First boot) is next.
+**Status:** Phase 2 (First boot) in progress, started 2026-10-10. Phase 1 done (2026-10-10).
 **Last updated:** 2026-10-10
 
 ## Goal
@@ -91,21 +91,23 @@ The gate was: the microcode is supported by RT64, and the symbol file covers the
 | stream3 fall-throughs | 243 functions run off their end into the next one. N64Recomp makes the C function simply return, with no warning. Silent miscompile | Cleanup script that chains each one into the next function, with a known-answer test |
 | stream3 cross-function loops | 169 functions in 14 loop groups (largest 95). Each loop becomes a call then `return`, so a loop turns into recursion | Check whether clang-cl makes these real jumps. If not, the stack grows and it needs a cleanup step |
 | 86 mid-function table addresses | Three inline tables point into the middle of functions. They sit beside the 5 jump-table stubs | Decide together with those 5 stubs: the fix for the dispatch decides whether the 86 become function starts |
-| `__osGetCause_recomp` link question | The generated C calls it 6 times from 3 unnamed functions, and N64Recomp writes no body for it. Not checked whether the runtime provides it | Name the 3 callers first (`func_80005D98`, `func_80005E58`, `func_80006190`). If they are libultra internals, the calls disappear |
+| `__osGetCause_recomp` link question | The generated C calls it 6 times from 3 unnamed functions, and N64Recomp writes no body for it. Not checked whether the runtime provides it | Name the 3 callers first (`func_80005D98`, `func_80005E58`, `func_80006190`). If they are libultra internals, the calls disappear. **Update 2026-10-10:** they are libultra's debug link code, but naming alone does not remove the calls. Stub the debug link functions in the recomp config (Phase 2 checklist, task 3) |
 | 61 unnamed libultra functions | 55 of 116 `reimplemented_funcs` are named. The rest look absent or too small to prove. An unnamed one gets translated as game code instead of replaced by the runtime | Expect some early crashes in hardware access code. Name each one as the crash points to it |
 
 Smaller open items: 1,344 bytes of stream3 code in 144 pieces that nothing reaches (may be dead; the number is from `tools/stream3_map.py`, and the 1,300 in the `NOTES.md` 2b report is the old throwaway tracer, which reached 44 more bytes through splat's labels), stream1's 30 entry labels around `0x80031028`, RT64 marks `F3D_SDK_E` as "needs confirmation", the audio microcode size is measured and not confirmed, and what stream3 does in the game is still unknown.
 
-**Suggested order for the first Phase 2 tasks**
+### Phase 2 checklist (started 2026-10-10)
 
-1. Windows build tools (`docs/SETUP.md` Part 2, deferred from Phase 0). **Done 2026-10-10.**
-2. Name the 3 callers of `__osGetCause`. Cheap, and it may close the link question.
-3. Real recomp config in the repo (replaces the throwaway ones in `build/`), with the 9 stubs listed and a reason for each.
-4. Fall-through cleanup script and its test. First, because it is the one silent problem.
-5. RSPRecomp config for the audio microcode.
-6. Project skeleton from the WM2K template, then first compile and link. Fix what the linker reports.
-7. First run. Chase crashes one at a time. Check the cross-function loops here.
-8. The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked.
+This is the suggested order from the go/no-go. It can change as the build teaches us things.
+
+- [x] Windows build tools (`docs/SETUP.md` Part 2, deferred from Phase 0). Done 2026-10-10
+- [x] Name the 3 callers of `__osGetCause`. Done 2026-10-10: one is proven and named (`__osSyncPutChars` at `0x80006190`); the other two are the debug link code in `kdebugserver.c`, in an older version than any reference we have, so they stay unnamed. Naming does not close the link question, stubs will (see `NOTES.md`)
+- [ ] Real recomp config in the repo (replaces the throwaway ones in `build/`), with the 9 stubs listed and a reason for each. Add the debug link functions as stubs here
+- [ ] Fall-through cleanup script and its test. First, because it is the one silent problem
+- [ ] RSPRecomp config for the audio microcode
+- [ ] Project skeleton from the WM2K template, then first compile and link. Fix what the linker reports
+- [ ] First run. Chase crashes one at a time. Check the cross-function loops here
+- [ ] The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked
 
 ## AI workflow
 

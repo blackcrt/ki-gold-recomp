@@ -49,8 +49,10 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--passive
 
 ```powershell
 Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_BuildTools.exe" -OutFile "$env:TEMP\vs_BuildTools.exe"
-& "$env:TEMP\vs_BuildTools.exe" --passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended
+Start-Process -FilePath "$env:TEMP\vs_BuildTools.exe" -ArgumentList "--passive --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended" -Wait -PassThru | Select-Object ExitCode
 ```
+
+`Start-Process -Wait` is used because the installer is a windowed program, and PowerShell's `&` does not wait for those: the prompt would come back while the install is still running. `ExitCode` can come back blank in PowerShell 5, so do not rely on it. The reliable check that the install finished is `vswhere` (see the x64 note below): if it prints an installation path, Build Tools is installed.
 
 Then turn on long file paths, since the runtime libraries we'll pull in later are nested deeply. In **PowerShell as administrator**:
 
