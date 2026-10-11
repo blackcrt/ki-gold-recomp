@@ -2,6 +2,59 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: RSPRecomp config for the audio microcode (Phase 2, task 5)
+
+**Result: the audio microcode translates. `rsp/kigold_audio.toml` is in the repo, RSPRecomp is step 6 of `tools/regen.py`, and the run is clean: exit 0, no warnings, `rsp/kigold_audio.cpp` is 73,112 bytes (2,272 lines).** Nothing was compiled or run as a game.
+
+**RSPRecomp build**
+- Already built. `build/N64Recomp/build-linux/RSPRecomp` came out of the same build as N64Recomp (checkout `ffb39cd`, system tools). No new build was needed.
+
+**The config (`rsp/kigold_audio.toml`)**
+- Format read from `read_config` in `RSPRecomp/src/rsp_recomp.cpp`: six required keys (`text_offset`, `text_size`, `text_address`, `rom_file_path`, `output_file_path`, `output_function_name`) and the optional `extra_indirect_branch_targets`. Paths are relative to the config file's folder, so the ROM path is `../build/kigold.decompressed.z64`.
+- Values: offset `0xC34170`, size `0xE20`, address `0x04001080`, function name `kigold_audio_ucode` (a neutral name in WM2K's style; `aspMain` is not proven).
+- The 16 command table entries at audio data + 0x10 (decompressed ROM `0xC3A4F0`, 16-bit each), in table order:
+  `0x1118 0x1470 0x11DC 0x1B38 0x1214 0x187C 0x1254 0x12D0 0x12EC 0x1328 0x140C 0x1294 0x1E24 0x138C 0x170C 0x144C`
+  All 16 are different, word aligned, and inside the code. Entries 12 and 13 are the `0x1E24138C` marker word from session 6.
+
+**How the address `0x04001080` was confirmed** (throwaway script, addresses only)
+- The boot microcode says so: at boot + 0x14 it loads `0x1080` into r7, and at boot + 0x38 it does `jr r7`.
+- The audio code agrees. Its `j`/`jal` instructions hold absolute addresses (43 instructions, 13 targets, `0x10D4` to `0x1DBC`). Tested every start address from `0x1000` to `0x11FC`: with `0x1080`, 18 of the 19 `jal` and table targets land right after an unconditional jump and its delay slot, which is where a routine starts. The next best address scores 4.
+
+**How the size `0xE20` was confirmed**
+- Traced the code from `0x1080` and the 16 table entries, following every branch and jump. The last instruction reached is at `0x1E98`, so the code ends at `0x1E9C`. One zero word of padding follows, up to `0x1EA0` = `0x1080 + 0xE20`. So: `0xE1C` bytes of code plus 4 of padding.
+- No branch, jump or table entry points outside the block.
+- The trace reaches `0xE0C` of the `0xE20` bytes. Not reached: one word at `0x1114`, three at `0x1144`, and the padding word. RSPRecomp translates the whole block anyway.
+
+**Git safety, tested the same way as task 3**
+- `git add rsp/kigold_audio.cpp` is refused (`.gitignore` line 12, `rsp/*.cpp`). Forced in with `git add -f`, `tools/guard.py --staged` blocks it: "this is generated code (recompiler output)", exit 1. Unstaged again with `git restore --staged`. No guard or `.gitignore` change was needed.
+
+**The regen step**
+- `tools/regen.py` now has 7 steps; RSPRecomp is step 6, after the cleanup. It deletes the old `.cpp` first, so a failed run cannot leave a stale file.
+- **RSPRecomp exits 0 even when it prints "Unhandled instruction"** (the source ignores that result), and it prints nothing on success. So the step fails on any output from it, not only on a non-zero exit code.
+- The run (`python3 tools/regen.py`): exit 0. N64Recomp numbers are the same as before (1434 functions, 235 fall-throughs fixed, 275 calls to 55 names with no body). RSPRecomp printed nothing.
+- The output has one function, 30 indirect jump cases (our 16 plus the return addresses RSPRecomp found itself), and all 16 table entries are among them.
+
+**Compared with WM2K (`rsp/wm2k_audio.toml`)**
+
+| | WM2K | KI Gold |
+| --- | --- | --- |
+| Keys | the same six plus `extra_indirect_branch_targets` | the same |
+| `text_address` | `0x04001080` | `0x04001080` |
+| `text_size` | `0xC54` | `0xE20` |
+| Table entries | 14 | 16 |
+| Paths | relative to `rsp/`, output `wm2k_audio.cpp` | relative to `rsp/`, output `kigold_audio.cpp` |
+
+- The shape is the same. The numbers are not, and should not be: **WM2K does not use the common audio microcode.** Its config comment says it is a newer AKI revision, "NOT aspMain", with 14 commands. Ours has the 16 commands of the common one.
+- WM2K had one table entry stored without the `0x1000` bit (`0x02B0` for `0x12B0`). All 16 of ours already have it. RSPRecomp's jump code ORs in `0x1000` at run time either way.
+
+**Stuck / unknown**
+- "It translates" is not "it works". Sound is only proven when the game runs (ground rule 1).
+- The generated file includes `librecomp/rsp.hpp`. The project has to register `kigold_audio_ucode` with the runtime for audio tasks; that belongs to the skeleton task.
+- What the 4 unreached words are was not looked at.
+
+**Next**
+- Phase 2 checklist: project skeleton from the WM2K template, then first compile and link.
+
 ## 2026-10-10: Dropped delay slots fixed in the tracer (Phase 2, task 4b)
 
 **Result: it was a tracer bug (two of them), not a real jump. Fixed in `tools/stream3_map.py`. The 3 dropped instructions are back in the generated C, and `tools/regen.py` now stops if a function is ever cut before a delay slot again.** stream3 has 605 functions (was 613), the symbol file 1434 (was 1442). Nothing was compiled or run as a game.

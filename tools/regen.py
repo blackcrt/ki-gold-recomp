@@ -12,12 +12,15 @@ Runs the steps in the only order that works:
   5. Cleanup (ground rule 2 in PLAN.md): fix what N64Recomp gets wrong.
      - tools/fix_fallthroughs.py chains functions that fall into the next one.
      New cleanup scripts go here, in this step.
-  6. Report: function count, and calls to functions that have no body.
+  6. Audio microcode: RSPRecomp reads rsp/kigold_audio.toml and writes
+     rsp/kigold_audio.cpp.
+  7. Report: function count, and calls to functions that have no body.
 
 Usage:
   python3 tools/regen.py
 
-RecompiledFuncs/ is generated game code: never commit it, never edit it by hand.
+RecompiledFuncs/ and rsp/*.cpp are generated game code: never commit them,
+never edit them by hand.
 """
 
 import hashlib
@@ -34,10 +37,13 @@ import fix_fallthroughs
 REPO = Path(__file__).resolve().parent.parent
 VENV_PYTHON = REPO / "disasm" / ".venv" / "bin" / "python"
 N64RECOMP = REPO / "build" / "N64Recomp" / "build-linux" / "N64Recomp"
+RSPRECOMP = N64RECOMP.with_name("RSPRecomp")
 SPLAT_CONFIG = REPO / "disasm" / "kigold.yaml"
 RECOMP_CONFIG = REPO / "kigold.toml"
 ROM = REPO / "build" / "kigold.decompressed.z64"
 OUT_DIR = REPO / "RecompiledFuncs"
+RSP_CONFIG = REPO / "rsp" / "kigold_audio.toml"
+RSP_OUT = REPO / "rsp" / "kigold_audio.cpp"
 SPLIT_LOG = REPO / "build" / "split.log"
 
 DEFINED = re.compile(r"^RECOMP_FUNC void (\w+)\(", re.MULTILINE)
@@ -66,11 +72,11 @@ def calls_without_body(out_dir: Path) -> tuple[int, Counter]:
 
 def main() -> int:
     sys.stdout.reconfigure(line_buffering=True)  # keep our lines in order with the tools' output
-    for needed in (VENV_PYTHON, N64RECOMP):
+    for needed in (VENV_PYTHON, N64RECOMP, RSPRECOMP):
         if not needed.exists():
             return fail(f"{needed} is missing. See docs/SETUP.md.")
 
-    print("[1/6] Unpack check")
+    print("[1/7] Unpack check")
     if rom_ok():
         print(f"  {ROM.relative_to(REPO)} matches the SHA1 in disasm/kigold.yaml")
     else:
@@ -80,7 +86,7 @@ def main() -> int:
         if not rom_ok():
             return fail("the rebuilt ROM still does not match the SHA1 in disasm/kigold.yaml")
 
-    print("[2/6] Split (splat)")
+    print("[2/7] Split (splat)")
     split = subprocess.run([str(VENV_PYTHON), "-m", "splat", "split", SPLAT_CONFIG.name],
                            cwd=SPLAT_CONFIG.parent, capture_output=True, text=True)
     SPLIT_LOG.write_text(split.stdout + split.stderr)
@@ -88,7 +94,7 @@ def main() -> int:
     if split.returncode != 0:
         return fail("splat split")
 
-    print("[3/6] Symbols (gen_symbols.py)")
+    print("[3/7] Symbols (gen_symbols.py)")
     if subprocess.run([str(VENV_PYTHON), "tools/gen_symbols.py"], cwd=REPO).returncode != 0:
         return fail("tools/gen_symbols.py")
     # N64Recomp drops a delay slot that sits in the next function, without a warning.
@@ -97,7 +103,7 @@ def main() -> int:
         return fail(error)
     print("  no function ends between a branch or jump and its delay slot")
 
-    print("[4/6] Recompile (N64Recomp)")
+    print("[4/7] Recompile (N64Recomp)")
     # Start from an empty folder so no file from an older run is left behind.
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     recomp = subprocess.run([str(N64RECOMP), RECOMP_CONFIG.name], cwd=REPO, capture_output=True, text=True)
@@ -111,11 +117,25 @@ def main() -> int:
     if recomp.returncode != 0:
         return fail("N64Recomp")
 
-    print("[5/6] Cleanup")
+    print("[5/7] Cleanup")
     for line in fix_fallthroughs.report(fix_fallthroughs.run(OUT_DIR)).splitlines():
         print(f"  {line}")
 
-    print("[6/6] Report")
+    print("[6/7] Audio microcode (RSPRecomp)")
+    # Remove the old file first so a failed run cannot leave a stale one behind.
+    RSP_OUT.unlink(missing_ok=True)
+    rsp = subprocess.run([str(RSPRECOMP), str(RSP_CONFIG.relative_to(REPO))], cwd=REPO, capture_output=True, text=True)
+    rsp_output = (rsp.stdout + rsp.stderr).strip()
+    for line in rsp_output.splitlines():
+        print(f"  {line}")
+    print(f"  RSPRecomp exit code: {rsp.returncode}")
+    # RSPRecomp exits 0 even after "Unhandled instruction", and prints nothing on success.
+    if rsp.returncode != 0 or rsp_output or not RSP_OUT.exists():
+        return fail("RSPRecomp (any output from it is an error)")
+    rsp_text = RSP_OUT.read_text()
+    print(f"  {RSP_OUT.relative_to(REPO)}: {len(rsp_text):,} bytes, {rsp_text.count(chr(10)):,} lines")
+
+    print("[7/7] Report")
     bodies, missing = calls_without_body(OUT_DIR)
     print(f"  {len(list(OUT_DIR.iterdir()))} files in {OUT_DIR.name}/, {bodies} function bodies")
     print(f"  __osGetCause_recomp calls: {missing.get('__osGetCause_recomp', 0)}")

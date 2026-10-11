@@ -1,0 +1,30 @@
+# RSPRecomp config for Killer Instinct Gold's audio microcode (US V1.2).
+# Turns the audio microcode into C++ in rsp/kigold_audio.cpp (generated, never committed).
+#
+# Run it with:  python3 tools/regen.py
+# Do not run RSPRecomp by hand: the decompressed ROM must be fresh first.
+#
+# Format checked against RSPRecomp's src/rsp_recomp.cpp (N64Recomp ffb39cd).
+# Paths are relative to this file's folder (rsp/).
+
+# Where the audio microcode sits in the decompressed ROM: stream1 (0xC00000) + 0x34170.
+text_offset = 0xC34170
+# 0xE1C bytes of code plus one zero word of padding. Tracing the code from its
+# entry and the 16 table entries below reaches 0x1E98 as the last instruction.
+text_size = 0xE20
+# Where the boot microcode puts it in RSP memory. The boot microcode loads
+# 0x1080 into a register and jumps to it, and the microcode's own jumps only
+# land on routine starts with this address.
+text_address = 0x04001080
+# Decompressed ROM written by tools/unpack_rom.py. Game data, never committed.
+rom_file_path = "../build/kigold.decompressed.z64"
+output_file_path = "kigold_audio.cpp"
+output_function_name = "kigold_audio_ucode"
+
+# The microcode jumps to each audio command through a table, so RSPRecomp cannot
+# see these addresses in the code. They are the 16 entries of the command table
+# at audio data + 0x10 (decompressed ROM 0xC3A4F0), in table order.
+extra_indirect_branch_targets = [
+    0x1118, 0x1470, 0x11DC, 0x1B38, 0x1214, 0x187C, 0x1254, 0x12D0,
+    0x12EC, 0x1328, 0x140C, 0x1294, 0x1E24, 0x138C, 0x170C, 0x144C,
+]
