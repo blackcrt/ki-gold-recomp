@@ -2,6 +2,36 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: `__osGetCause` named, one stub fewer (session 2, task 3)
+
+**Done**
+- **Deleted the throwaway stream3 files in `build/`** (BlackCRT approved): `stream3_map.py`, `stream3_map_report.txt`, `stream3_funcs.txt`, `s3test/`, `s3check/`. All were git-ignored. `tools/stream3_map.py` replaces them.
+- **Named `__osGetCause` at 0x800064F0** in `disasm/symbol_addrs.txt`, in the session 5 hand-found block. The session 5 evidence was checked again from scratch, not copied:
+  - The function is `mfc0 $v0, $13` (read Cause) then `jr $ra`. Byte for byte the same as `os/getcause.o` in both reference builds (`ultralib_2.0I`, `ultralib_2.0I_rom`).
+  - Single candidate: no other object in `build/ref/` contains that instruction pair.
+  - 6 calls, two each from `func_80005D98`, `func_80005E58` and `func_80006190`. All three are unnamed, so no caller confirms the name; it rests on the exact match alone.
+- Re-ran the split and `tools/gen_symbols.py`.
+
+**Checks**
+
+| Check | Result |
+| --- | --- |
+| splat split | exit 0, no warnings or errors |
+| `syms/dump.toml` | one line changed: `func_800064F0` is now `__osGetCause`. Still 1442 functions; boot named 90 (was 89), 251 names in total |
+| N64Recomp (throwaway config in a scratch folder, task 2c's stub list minus `func_800064F0`) | exit 0, "Function count: 1442", **9 stubs (was 10)** |
+| Tool tests | 5 of 5 pass |
+
+- **Coverage: `reimplemented_funcs` is still 55 of 116.** `__osGetCause` is on N64Recomp's `ignored_funcs` list, not the reimplemented one. `ignored_funcs` is now **112 of 358** (was 111), `renamed_funcs` 6 of 83. The session 7 note that called it a reimplemented blocker was loose: being ignored is what removes the stub (N64Recomp skips the function instead of translating it).
+
+**Stuck / unknown**
+- **The three callers still call it.** The generated C has 6 calls to `__osGetCause_recomp`, and N64Recomp emits no body for an ignored function. Unless the runtime provides that name, the Phase 2 build fails at link time. The likely real fix is naming the three callers: if they are libultra internals on the ignored or reimplemented lists, the calls go away with them. Not checked.
+- Nothing was compiled or run (ground rule 1).
+- Remaining stubs: `func_80030EF0` and the 8 in stream3.
+
+**Next**
+- Identify `func_80005D98`, `func_80005E58` and `func_80006190` (the only users of Cause outside the exception handler).
+- Phase 1 go/no-go write-up.
+
 ## 2026-10-10: stream3 map in the repo, symbol file now 1442 functions (session 2, task 2c)
 
 **Decision: option A (WM2K style) for stream3.** Recorded in `PLAN.md`. This task only put the map into the repo. No cleanup scripts and no fixes for the 8 stubbed functions; those are Phase 2.

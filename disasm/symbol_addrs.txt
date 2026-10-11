@@ -519,6 +519,8 @@ __osDispatchThread = 0x800044C8; // type:func
 __osCleanupThread = 0x80004608; // type:func
 // evidence (by hand): exact match with osAiGetLength only (3 instr, returns the AI length register 0xA4500004; the register address is part of the match). Called twice by the game's audio code, once right after osAiSetNextBuffer
 osAiGetLength = 0x80039990; // type:func
+// evidence (by hand, re-checked 2026-10-10): exact match with __osGetCause only (2 instr: mfc0 $v0, Cause, then jr $ra) in ultralib_2.0I and ultralib_2.0I_rom os/getcause.o; no other reference object contains that pair. 6 calls, two each from func_80005D98, func_80005E58 and func_80006190 (all unnamed, so no caller confirms the name)
+__osGetCause = 0x800064F0; // type:func
 
 // stream3 routine starts, found by tracing the code (tools/stream3_map.py --symbols).
 // These are splat's default names: they mark where routines start and claim no meaning.

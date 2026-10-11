@@ -125,7 +125,7 @@ functions = [
     { name = "osDestroyThread", vram = 0x80006320, size = 0xF8 },
     { name = "__osSetCompare", vram = 0x80006420, size = 0xC },
     { name = "__osProbeTLB", vram = 0x80006430, size = 0xB8 },
-    { name = "func_800064F0", vram = 0x800064F0, size = 0xC },
+    { name = "__osGetCause", vram = 0x800064F0, size = 0xC },
     { name = "__osAtomicDec", vram = 0x80006500, size = 0x58 },
 ]
 
