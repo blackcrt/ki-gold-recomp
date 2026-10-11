@@ -2,6 +2,24 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: Phase 1 go/no-go, go for Phase 2 (session 2, task 4)
+
+**Result: GO for Phase 2, approved by BlackCRT.** Phase 1 is done. The full write-up (verdict per part, risks, first Phase 2 tasks) is in `PLAN.md` under "Phase 1 go/no-go". Docs only; no tool, config or symbol changes.
+
+**Done**
+- Wrote the go/no-go section in `PLAN.md`, updated the status line, ticked the last Phase 1 box.
+- Verdicts: microcode, boot, stream1, stream2 and the symbol file are a go; stream3 is a go with known work (option A).
+- **Unreached stream3 code is 1,344 bytes in 144 pieces**, checked by running `tools/stream3_map.py`. The 1,300 bytes in 145 pieces in the 2b entry below is the old throwaway tracer, which also started from splat's labels and reached 44 more bytes. Same 92,000 total.
+
+**Stuck / unknown**
+- Nothing was compiled or run (ground rule 1). Every verdict means "ready to try".
+- The risks carried into Phase 2 are listed in `PLAN.md`: 9 stubs, 243 fall-throughs, 14 cross-function loop groups, 86 mid-function table addresses, the `__osGetCause_recomp` link question, 61 unnamed libultra functions.
+- stream1 calls stream3 at `0x8000FEF0`, near the start of stream1, so stream3 may run early in boot. Not checked.
+
+**Next**
+- Phase 2, first tasks in order: Windows build tools (`docs/SETUP.md` Part 2), name the 3 callers of `__osGetCause`, real recomp config, fall-through cleanup script.
+- Start a fresh coach chat for Phase 2.
+
 ## 2026-10-10: `__osGetCause` named, one stub fewer (session 2, task 3)
 
 **Done**

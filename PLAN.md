@@ -1,7 +1,7 @@
 # KI Gold Recomp: Project Plan
 
-**Status:** Phase 0 done (2026-10-08). Phase 1 (Recon) is next.
-**Last updated:** 2026-10-08
+**Status:** Phase 1 done (2026-10-10), go for Phase 2. Phase 2 (First boot) is next.
+**Last updated:** 2026-10-10
 
 ## Goal
 
@@ -54,7 +54,7 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 - [x] `python3 tools/romcheck.py` passes and the SHA1 is recorded in `tools/rom.sha1`
 - [ ] Ollama and Qwen2.5-Coder 14B installed and sanity checked. **Deferred:** skipped on purpose, see the decisions log
 
-### Phase 1 checklist
+### Phase 1 checklist (done 2026-10-10)
 
 - [x] `python3 tools/scan_rom.py`: identify graphics and audio microcode. Done 2026-10-08: graphics is stock Fast3D (RT64 entry `F3D_SDK_E`, matched by hash on code and data, supported); audio is the standard Nintendo audio microcode (see `NOTES.md`, session 6)
 - [x] `python3 tools/scan_rom.py`: check for Rare 1172 compression (compressed code needs a decompressed ROM before N64Recomp can read it)
@@ -63,7 +63,49 @@ Patches need an extra toolchain (a MIPS-capable clang and make); we add it at th
 - [x] Fingerprint libultra against GoldenEye's `libultra` and `libultrare` (see `docs/GOLDENEYE.md`); the runtime replaces these functions, so they must be identified. Done 2026-10-08 against ultralib 2.0I and GoldenEye's version G and `libultrare`: 219 exact matches, 54 of 116 `reimplemented_funcs` named (see `NOTES.md`). The fingerprint run is finished, the identification is not: the rest moves to the next line. The 2.0D lead is still not confirmed
 - [x] Identify remaining OS core functions by hand. Done 2026-10-08: start-up, Pi and Vi managers, and the exception handler group are named (see `NOTES.md`, sessions 4 and 5). 55 of 116 `reimplemented_funcs` named; the rest look absent from the game or are too small to prove
 - [x] Generate the symbol file N64Recomp reads (`syms/`). Done 2026-10-08: `tools/gen_symbols.py` writes `syms/dump.toml` (4 sections, 907 functions) and N64Recomp reads it without errors. Boot, stream1 and stream2 are fully covered; only 45% of stream3's code is in functions (see `NOTES.md`, session 7) **Update 2026-10-10:** stream3's functions now come from the tracer (`tools/stream3_map.py`): 1442 functions in all, stream3 613, every byte of stream3's code area is in a function or in one of 31 known tables (see `NOTES.md`, session 2, task 2c)
-- [ ] Go/no-go: write findings to `NOTES.md` and confirm the plan
+- [x] Go/no-go: write findings to `NOTES.md` and confirm the plan. Done 2026-10-10: go for Phase 2, approved by BlackCRT. The write-up is the next section; `NOTES.md` has a short entry that points to it
+
+### Phase 1 go/no-go (2026-10-10)
+
+**Recommendation: GO for Phase 2.**
+
+The gate was: the microcode is supported by RT64, and the symbol file covers the whole game. Both are met. Everything in this section is from reading and translating the ROM. Nothing has been compiled or run yet, so each verdict means "ready to try", not "works".
+
+| Part | Verdict | Why |
+| --- | --- | --- |
+| Microcode | Go | Graphics is stock Fast3D, RT64 entry `F3D_SDK_E`, matched by hash on code and data. Audio is the standard Nintendo audio microcode, not Rare's modified one |
+| boot | Go | 119 functions, 90 named, all code covered. No stubs since `__osGetCause` was named |
+| stream1 | Go | 459 functions, 159 named, all code covered. 1 stub (`func_80030EF0`) |
+| stream2 | Go | 251 functions, all code covered, 0 stubs. Only 1 function named, which is fine for a recomp |
+| stream3 | Go, with known work | 613 functions from the tracer, every byte is in a function or one of 31 tables, 605 translate. Hand-written assembly that breaks normal calling rules: this is where most Phase 2 fixes will land |
+| Symbol file | Go | `syms/dump.toml`: 4 sections, 1442 functions, 251 names. N64Recomp reads it and finishes with exit 0 and 9 stubs |
+
+**Why go:** no blocker was found, and the open problems are all the kind that only a build can answer. More recon would not shrink them. stream3 has a chosen approach (option A, WM2K style) and a fallback (option B).
+
+**Known risks going into Phase 2**
+
+| Risk | What we know | Plan |
+| --- | --- | --- |
+| Nothing compiled or run | "Translates" only means N64Recomp produced C | Get to a first compile and link early, before polishing anything |
+| 9 stubs | `func_80030EF0` in stream1 (branches into the middle of the next function), and 8 in stream3: 5 hand-made jump tables, 2 that read the Count register, 1 with a stack offset N64Recomp rejects | A stub is an empty function. Fix each when the game reaches it |
+| stream3 fall-throughs | 243 functions run off their end into the next one. N64Recomp makes the C function simply return, with no warning. Silent miscompile | Cleanup script that chains each one into the next function, with a known-answer test |
+| stream3 cross-function loops | 169 functions in 14 loop groups (largest 95). Each loop becomes a call then `return`, so a loop turns into recursion | Check whether clang-cl makes these real jumps. If not, the stack grows and it needs a cleanup step |
+| 86 mid-function table addresses | Three inline tables point into the middle of functions. They sit beside the 5 jump-table stubs | Decide together with those 5 stubs: the fix for the dispatch decides whether the 86 become function starts |
+| `__osGetCause_recomp` link question | The generated C calls it 6 times from 3 unnamed functions, and N64Recomp writes no body for it. Not checked whether the runtime provides it | Name the 3 callers first (`func_80005D98`, `func_80005E58`, `func_80006190`). If they are libultra internals, the calls disappear |
+| 61 unnamed libultra functions | 55 of 116 `reimplemented_funcs` are named. The rest look absent or too small to prove. An unnamed one gets translated as game code instead of replaced by the runtime | Expect some early crashes in hardware access code. Name each one as the crash points to it |
+
+Smaller open items: 1,344 bytes of stream3 code in 144 pieces that nothing reaches (may be dead; the number is from `tools/stream3_map.py`, and the 1,300 in the `NOTES.md` 2b report is the old throwaway tracer, which reached 44 more bytes through splat's labels), stream1's 30 entry labels around `0x80031028`, RT64 marks `F3D_SDK_E` as "needs confirmation", the audio microcode size is measured and not confirmed, and what stream3 does in the game is still unknown.
+
+**Suggested order for the first Phase 2 tasks**
+
+1. Windows build tools (`docs/SETUP.md` Part 2, deferred from Phase 0).
+2. Name the 3 callers of `__osGetCause`. Cheap, and it may close the link question.
+3. Real recomp config in the repo (replaces the throwaway ones in `build/`), with the 9 stubs listed and a reason for each.
+4. Fall-through cleanup script and its test. First, because it is the one silent problem.
+5. RSPRecomp config for the audio microcode.
+6. Project skeleton from the WM2K template, then first compile and link. Fix what the linker reports.
+7. First run. Chase crashes one at a time. Check the cross-function loops here.
+8. The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked.
 
 ## AI workflow
 
