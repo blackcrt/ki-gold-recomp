@@ -7,8 +7,7 @@
 # RecompFrontend and RT64 into one Windows .exe. Run it through tools/build.ps1,
 # which loads the x64 clang-cl environment first.
 #
-# State: skeleton. It configures, but the executable has no main() yet. main.cpp and
-# the bodies the runtime does not provide come in the next step (Phase 2, task 6c).
+# State: compiles and links (Phase 2, task 6c). The exe has not been run yet.
 cmake_minimum_required(VERSION 3.20)
 project(KIGoldRecompiled LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 17)
@@ -124,12 +123,16 @@ add_subdirectory(${FRONTEND})
 # --- Main executable ---
 add_executable(KIGoldRecompiled)
 
-# Task 6c adds src/main/main.cpp and the game-specific runtime code to this list.
 set(SOURCES
+    ${CMAKE_SOURCE_DIR}/src/main/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/tlb.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/missing_funcs.cpp
     ${AUDIO_UCODE_SOURCE}
 )
 target_sources(KIGoldRecompiled PRIVATE ${SOURCES})
 target_include_directories(KIGoldRecompiled PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
     ${NMR}/N64Recomp/include
     ${NMR}/thirdparty/sse2neon
     ${RT64DIR}/src

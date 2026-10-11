@@ -2,6 +2,88 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-10: main.cpp, stand-in bodies, first compile and link (Phase 2, task 6c)
+
+**Result: it compiles and links. `build-msvc/KIGoldRecompiled.exe` exists (12.1 MB). The exe was not run; the first run is task 7 and needs the inflate hooks first.** Linking only proves every name has a body. It says nothing about whether the game works (ground rule 1).
+
+**Decisions on the 6b questions (BlackCRT, 2026-10-10)**
+1. Launcher assets: decide at the first run. Lean: commit the text files if their licenses allow, download the fonts at configure time. Now part of the first-run item in `PLAN.md`.
+2. Submodule pins: keep as they are. "Fork the 3 libraries under BlackCRT with a branch at each pin, point `.gitmodules` there" is on the before-going-public list.
+
+**New files (all our own)**
+
+| File | What it does |
+| --- | --- |
+| `src/main/main.cpp` | Program start, 284 lines (WM2K's is 959). Describes the game to the runtime, registers the code sections, sets up window, sound, input and microcode callbacks, calls `recomp::start`. Follows WM2K's order of steps, without its diagnostics, logo, auto-boot and custom key bindings |
+| `src/main/register_overlays.cpp` | Hands the generated section table (boot + 3 streams) to the runtime. Adapted from WM2K |
+| `src/game/tlb.cpp` | `osMapTLB_recomp` and `osUnmapTLB_recomp`. They log their arguments and do nothing |
+| `src/game/missing_funcs.cpp` | Five loud log-only bodies (see the linker list) |
+| `include/kigold_decls.h` | Shared declarations |
+| `patches/ui_funcs.h` | Not planned, needed by the build (see "Build errors") |
+
+- `CMakeLists.txt`: the four `.cpp` files and `include/` added.
+
+**Save type: 4K EEPROM, plus Controller Pak code** (evidence from the libultra calls, addresses only)
+- The three EEPROM functions are named by exact match (`build/libultra_symbols.txt`): `osEepromProbe` `0x800365D0`, `osEepromLongWrite` `0x80036640`, `osEepromLongRead` `0x80036780`. None of the named libultra functions is an SRAM or FlashRAM one. That is not full proof of absence, because 61 libultra functions are still unnamed.
+- All EEPROM use is in three stream2 functions:
+  - `func_801CD2C4_stream2` (save): `osEepromProbe`, then `osEepromLongWrite(queue, address 0, buffer, length 0x200)`.
+  - `func_801CD324_stream2` (load): `osEepromProbe`, then `osEepromLongRead(queue, address 0, buffer, length 0x200)`.
+  - `func_801CCF4C_stream2`: `osEepromProbe` only, result stored at `0x802D3B96`.
+- **0x200 bytes is 512 bytes, exactly the size of a 4K EEPROM** (a 16K one holds 2048). The game reads and writes the whole thing in one call, at address 0, with a constant length.
+- The probe result is only tested for zero or not zero. The game never checks for the 16K answer (2). So it would also run on a 16K chip, but it only ever uses 4K worth. `main.cpp` sets `recomp::SaveType::Eep4k`, and the runtime then answers the probe with 1 (4K).
+- The save has a checksum: both functions call a helper (`func_801CD1C4_stream2` before the write, `func_801CD08C_stream2` after the read) that calls libultra's `__osContDataCrc` on the buffer (length argument 0x200 there too).
+- **Controller Pak, also used.** `func_801CD3A4_stream2` calls `func_800344D0` with company code `0x3031` ("01", Nintendo) and game code `0x4E4B4945` ("NKIE"), plus name pointers and a result pointer. That is the argument shape of libultra's `osPfsFindFile`. The first argument is an entry in a table at `0x802D3AB0` with 0x68 bytes per entry (the size of libultra's `OSPfs`), and `func_801CCF4C_stream2` passes entries 0 and 1 of that table with channel numbers 0 and 1 to `func_80034350`. So the game looks for a Controller Pak in ports 1 and 2. These two functions are **not named**: the shape fits, but there is no exact-match proof.
+- The runtime cannot emulate a Controller Pak (its `Pak` type only has `None` and `RumblePak`), so `main.cpp` reports no pak. What the game stores there is not known yet.
+
+**Build errors and what was done**
+- Our five source files compiled without errors on the first try.
+- One error, in a submodule file, fixed in our own repo without touching the submodule: `lib/RecompFrontend/recompui/src/api/ui_api_events.cpp` includes `patches/ui_funcs.h` from the root of the project that builds it (its own comment: "TODO: Forced game includes"). We had no such file. It only needs the UI event types, which RecompFrontend also ships in its public header `recompui/event_structs.h`. So `patches/ui_funcs.h` is 3 lines of ours that include that header. WM2K has its own copy of this file for the same reason.
+- No change to generated code or to any submodule. `git submodule status` shows the three pins, no local changes.
+
+**The linker's list of missing names: 7**
+- Predicted before building by searching the runtime source for each of the 55 names: 48 found, 7 not.
+- Confirmed by the linker itself: one extra link with `tlb.cpp` and `missing_funcs.cpp` taken out of the build reported exactly these 7 (`undefined symbol`), then the build file was put back.
+
+| Name | Calls | Called from | What was done |
+| --- | --- | --- | --- |
+| `osMapTLB_recomp` | 4 | `func_8001CF5C`, `func_801C57B0_stream2` | `src/game/tlb.cpp`: logs all 6 arguments, maps nothing |
+| `osUnmapTLB_recomp` | 2 | the same two | `src/game/tlb.cpp`: logs the index |
+| `__osSiGetAccess_recomp` | 4 | `func_80034020`, `func_80034350`, `func_8003BF10`, `func_8003C2A0` | `src/game/missing_funcs.cpp`: loud log only |
+| `__osSiRelAccess_recomp` | 6 | the same four | loud log only |
+| `__osSiRawStartDma_recomp` | 8 | `func_80034020`, `func_800343F4`, `func_8003BF10`, `func_8003C2A0` | loud log only |
+| `__osContAddressCrc_recomp` | 2 | `func_8003C13C`, `func_8003C4C4` | loud log only |
+| `__osContDataCrc_recomp` | 4 | `func_8003BF10`, `func_8003C2A0`, `func_801CD08C_stream2`, `func_801CD1C4_stream2` | loud log only |
+
+- Why the last five are missing: N64Recomp leaves these libultra names for the runtime to supply, and the runtime at our pin has no body for them. In other games they are only called from inside libultra functions the runtime replaces whole. Here they are called from unnamed functions (Controller Pak style code in boot and stream1) and from the game's own save checksum code.
+- **These log-only bodies will cause wrong behavior when reached, on purpose loudly.** Two known cases:
+  - `__osContDataCrc` is called by the EEPROM load and save path. With a log-only body the checksum is garbage, so a load will likely be judged corrupt.
+  - After `__osSiRawStartDma` the callers wait for a reply message that will never come, so a thread can hang there.
+- Likely proper fix for the two CRC functions (suggestion, not done): they are plain arithmetic and their code is in the ROM at known addresses (`0x80041210`, `0x800412C0`), so letting N64Recomp translate them under another name would give correct results. That is a `kigold.toml` or symbol change and a regeneration.
+
+**The build**
+- Command: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1' -Build`
+- **Full build from nothing (`-Build -Fresh`): 117 seconds**, 908 steps, configure 10.9 s of that. Exit 0. An incremental build of our files and the final link: 26 seconds.
+- Output in `build-msvc/` (git-ignored): `KIGoldRecompiled.exe` 12.1 MB, `KIGoldRecompiled.map` 10 MB, and the copied `SDL2.dll`, `dxil.dll`, `dxcompiler.dll`.
+
+**Warnings**
+- None in our own files.
+- 233 compiler warnings, all inside `lib/` (unused parameters and variables, signed/unsigned compares, missing field initializers). Normal noise for these libraries.
+- Worth knowing: 4 operator-precedence warnings in the runtime's `rsp_vu_impl.hpp` (the RSP vector unit, used by our audio microcode). Upstream code, used by every recomp, so probably fine, but it is the first place to look if sound math is wrong.
+- 3 CMake deprecation notices in third-party build files, as in 6b.
+- `RecompiledFuncs` is compiled with warnings off, so the generated code reported nothing either way.
+
+**Stuck / unknown**
+- **The ROM question for task 7.** `main.cpp` registers the hash of the original 12 MB ROM (XXH3 64-bit `0x2952FB28B16AB571`, computed with a throwaway program, hash only). But the section table in the generated code points at the decompressed ROM layout (streams at `0xC00000` and up), which the user's ROM does not have. How the runtime gets from one to the other belongs with the inflate hooks.
+- The N64Recomp version worry from 6b (generated code from `ffb39cd`, runtime header from `f8d49ca`): no compile or link problem showed up.
+- One player only for now (`set_single_player_mode(true)`). Two-player setup needs a look at how RecompFrontend assigns controllers; WM2K changed its fork for that.
+- No Rumble Pak is reported. The game is from 1996, before the Rumble Pak; not checked in the code.
+- `RecompiledFuncs/lookup.cpp` is generated but not compiled (WM2K does not compile its copy either). Nothing asked for it at link time.
+- The menu assets are still missing, so the launcher cannot draw text yet. First-run item.
+
+**Next**
+- Task 7 prep: hook the 3 inflate sites, and settle the ROM layout question above.
+- Then the first run.
+
 ## 2026-10-10: Submodules, license, CMake skeleton, clean configure (Phase 2, task 6b)
 
 **Result: the three runtime libraries are in `lib/` as submodules at the agreed pins, the repo is GPL-3.0, and `tools/build.ps1` gets a clean CMake configure (exit 0, clang-cl 19.1.5, x64).** Nothing was compiled. There is no `main.cpp` yet; that is task 6c.
