@@ -109,7 +109,7 @@ This is the suggested order from the go/no-go. It can change as the build teache
 - [x] RSPRecomp config for the audio microcode. Done 2026-10-10: `rsp/kigold_audio.toml`, step 6 of `tools/regen.py`, clean run (73,112 bytes of C++). Address `0x04001080` and size `0xE20` confirmed from the code. Sound is not proven until the game runs
 - [x] Project skeleton from the WM2K template, then first compile and link. Fix what the linker reports. Done 2026-10-10 (tasks 6b and 6c): submodules, `COPYING`, `CMakeLists.txt`, `tools/build.ps1`, then `src/main/main.cpp` and the stand-in bodies. `KIGoldRecompiled.exe` links; a full build takes about 2 minutes. The linker asked for 7 names the runtime does not have: the 2 TLB functions and 5 controller-port internals, all log-only for now (see `NOTES.md`, task 6c). Not run yet. Task 7c (2026-10-12): the 2 CRC functions are now translated from the game's own code, so 5 log-only names are left (2 TLB, 3 serial port). Task 7d (2026-10-12): `__osSiRawStartDma` answers as "nothing plugged in" and sends the done message, so it cannot hang a thread
 - [x] Hook the inflate helper so the runtime sees streams 1 to 3 load (and swap streams 2 and 3). One hook on `boot_inflate` plus the ROM read helpers, in `src/game/inflate_hooks.cpp`. Built, not yet proven by a run
-- [ ] Menu assets and controller database next to the exe. Needed for the first run. **Decide at the first run (decision 2026-10-10).** Lean: commit the text files (`recomp.rcss`, the icons, the controller database) if their licenses allow, and download the fonts at configure time
+- [x] Menu assets and controller database next to the exe. Done 2026-10-12 (task 7e): our own `recomp.rcss`, 11 icons and the controller database are committed (`menu/`, `recompcontrollerdb.txt`), the 3 fonts are downloaded at configure time, pinned and hash checked. Sources and licenses in `docs/ASSETS.md`. Not run yet
 - [ ] First run. Chase crashes one at a time. Check the cross-function loops here
 - [ ] The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked
 
@@ -185,7 +185,7 @@ The runtime libraries in `lib/` are git submodules: our repo stores only a point
 - [ ] Settle the two other libraries without a license file: `rt64/dxc-bin` (prebuilt Microsoft shader compiler) and `mupen64plus-win32-deps` (bundle of prebuilt libraries). Both arrive through rt64
 - [ ] Fork the 3 libraries under BlackCRT with a branch at each pin, and point `.gitmodules` there. The pins are not on any upstream branch, so a fresh clone depends on GitHub still serving them (see `NOTES.md`, task 6b)
 - [ ] Check the submodule pins still download in a fresh clone
-- [ ] Confirm the license of every menu asset (fonts, icons, style sheet, controller database) once their source is decided
+- [ ] Confirm the license of every menu asset once more before going public (sources are in `docs/ASSETS.md`). Open point: the icons are GPL-3.0 through BanjoRecomp's repository license, with no per-file statement
 - [ ] Dump your own cartridge and build from it
 - [ ] Clean build from a fresh clone using only the README (Phase 5 gate)
 

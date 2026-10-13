@@ -2,6 +2,49 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Menu assets and controller database (Phase 2, task 7e)
+
+**Result: the build now puts a complete `assets` folder and `recompcontrollerdb.txt` next to the exe. Build passes. The exe was not run**, so whether the launcher really draws is still unproven (ground rule 1).
+
+**Decision (BlackCRT, final):** commit the text files if their license allows it in a GPL-3.0 repo; download the fonts at configure time, pinned and hash checked; no font in git, no guard change.
+
+**What RecompFrontend loads at our pin** (searched in its source): `recomp.rcss`, `NotoEmoji-Regular.ttf`, `promptfont/promptfont.ttf`, the primary font our `main.cpp` registers (`InterVariable.ttf`), and 11 icons: `Caret`, `Cont`, `Keyboard`, `PlusKeyboard`, `Question`, `Quit`, `RecordBorder`, `RecordSpinner`, `Reset`, `Trash`, `X`. It never loads a controller database; our `main.cpp` already did, from the exe's folder.
+
+**Where each file comes from** (full table with hashes in `docs/ASSETS.md`)
+
+| File | Source | License | In git |
+| --- | --- | --- | --- |
+| `menu/recomp.rcss` | written by us. WM2K's is only a placeholder too; the real styles are built into RecompFrontend | ours, GPL-3.0 | yes |
+| `menu/icons/*.svg` (11) | BanjoRecomp `assets/icons/`, commit `dbd5215` | GPL-3.0 | yes |
+| `recompcontrollerdb.txt` | BanjoRecomp, same commit. Data from SDL_GameControllerDB | GPL-3.0, data zlib | yes |
+| `InterVariable.ttf` | rsms/inter v4.1 | OFL 1.1 | no, downloaded |
+| `NotoEmoji-Regular.ttf` | googlefonts/noto-emoji v2.034 | OFL 1.1 | no, downloaded |
+| `promptfont.ttf` | Shinmera/promptfont v1.5 release zip | OFL 1.1 | no, downloaded |
+
+- Nothing was copied from `lib/`. WM2K's copies in `build/ref/` were only used as a checklist and for hash comparison.
+- Why BanjoRecomp for the icons: Zelda64Recomp has only 5 of the 11. Banjo: Recompiled is by the RecompFrontend authors and has all of them. Its repo is GPL-3.0 with no separate asset terms, and the files carry no third-party marks. The 11 files are identical to WM2K's copies.
+- Why the filtered controller database: the full upstream file is 609 KB, over the guard's 512 KB limit.
+- **The folder is `menu/`, not `assets/`:** the guard blocks any folder named `assets` (reserved for extracted game data). The build copies `menu/` into `assets/` next to the exe.
+
+**The build** (`CMakeLists.txt`)
+- `kigold_download`: downloads a file unless it is already there with the right SHA-256; a failed download or a wrong hash stops the configure with a readable error and deletes the file. Tested with a deliberately wrong hash.
+- Inter and Noto Emoji come as single files from the original repositories at fixed commits. PromptFont only exists inside its release zip (439 KB), so the zip is downloaded and the font and license are taken out, each checked again.
+- Each font's license file is placed beside it.
+- New target `KIGoldAssets`, which the exe depends on: copies everything on every build, also when the exe does not relink.
+- Downloads live in `build-msvc/menu-fonts/` (git-ignored). A configure now needs internet once.
+
+**Checked after the build**
+- `build-msvc/assets/`: `recomp.rcss`, 2 fonts and their licenses, `promptfont/` with font and license, `icons/` with 11 files. `build-msvc/recompcontrollerdb.txt` is there.
+- The three fonts and the database have the pinned hashes; the 11 icons are identical to the pinned source.
+
+**Stuck / unknown**
+- **PromptFont is not the exact build other recomps ship.** Theirs (101,696 bytes) matches none of the releases v1.2 to v1.10. v1.5 is the closest. If a controller button picture is wrong in the menus, look here first.
+- BanjoRecomp's README has a "No-AI stance" for contributions to their project. It is not a license term, and GPL-3.0 allows the reuse, but it is worth knowing where the icons come from.
+- The icons' license is the repository's GPL-3.0; there is no per-file statement. Added to the before-going-public check.
+
+**Next**
+- The first run, with `KIGOLD_VERIFY_INFLATE` set.
+
 ## 2026-10-12: Safe stand-in for `__osSiRawStartDma` (Phase 2, task 7d)
 
 **Result: `__osSiRawStartDma` now answers like a console with nothing plugged in and sends the "done" message, so no caller waits forever. Build passes. The exe was not run.** Decisions from 7c (BlackCRT): yes to the stand-in, and the `_game` suffix is fine.

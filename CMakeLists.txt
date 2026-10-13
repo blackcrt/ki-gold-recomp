@@ -168,9 +168,111 @@ if (WIN32)
             $<TARGET_FILE_DIR:KIGoldRecompiled>)
 endif()
 
-# Not done yet: the menu assets (fonts, recomp.rcss, icons) and the controller
-# database. RecompFrontend loads them from an assets folder next to the exe but does
-# not ship them, and no other submodule has them. Open decision, see PLAN.md.
+# ---- Menu assets and controller database ----
+# RecompFrontend loads recomp.rcss, three fonts and icons/*.svg from an "assets"
+# folder next to the exe, and main.cpp loads recompcontrollerdb.txt from the exe's
+# folder. Sources, licenses and versions of every file: docs/ASSETS.md.
+#
+#   menu/                    committed: our recomp.rcss and the icons
+#   recompcontrollerdb.txt   committed
+#   the fonts                NOT committed: downloaded here from their original
+#                            projects at fixed versions, each checked by SHA-256
+#
+# Our folder is called "menu" because the legal guard reserves the name "assets"
+# for extracted game data.
+set(KIGOLD_FONT_DIR "${CMAKE_BINARY_DIR}/menu-fonts")
+set(KIGOLD_ASSET_DIR "${CMAKE_BINARY_DIR}/assets")
+
+# Downloads url to dest unless dest is already there with the right hash. Stops the
+# configure with a readable error on a failed download or a wrong hash.
+function(kigold_download url sha256 dest)
+    if (EXISTS "${dest}")
+        file(SHA256 "${dest}" have)
+        if (have STREQUAL "${sha256}")
+            return()
+        endif()
+    endif()
+    message(STATUS "Downloading ${url}")
+    file(DOWNLOAD "${url}" "${dest}" STATUS status TLS_VERIFY ON)
+    list(GET status 0 code)
+    if (NOT code EQUAL 0)
+        list(GET status 1 reason)
+        file(REMOVE "${dest}")
+        message(FATAL_ERROR "Could not download ${url}: ${reason}\n"
+            "The menu fonts are downloaded at configure time (see docs/ASSETS.md). "
+            "Check the internet connection and run the build again.")
+    endif()
+    file(SHA256 "${dest}" have)
+    if (NOT have STREQUAL "${sha256}")
+        file(REMOVE "${dest}")
+        message(FATAL_ERROR "Wrong SHA-256 for ${url}\n  expected ${sha256}\n  got      ${have}\n"
+            "The file was deleted. Do not use it. See docs/ASSETS.md.")
+    endif()
+endfunction()
+
+# Inter 4.1 (SIL Open Font License 1.1), https://github.com/rsms/inter
+set(KIGOLD_INTER_URL "https://raw.githubusercontent.com/rsms/inter/e3a3d4c57d5ecc01453a575621882a384c1995a3")
+kigold_download("${KIGOLD_INTER_URL}/docs/font-files/InterVariable.ttf"
+    4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf
+    "${KIGOLD_FONT_DIR}/InterVariable.ttf")
+kigold_download("${KIGOLD_INTER_URL}/LICENSE.txt"
+    262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a
+    "${KIGOLD_FONT_DIR}/InterVariable-LICENSE.txt")
+
+# Noto Emoji 2.034 (SIL Open Font License 1.1), https://github.com/googlefonts/noto-emoji
+set(KIGOLD_NOTO_URL "https://raw.githubusercontent.com/googlefonts/noto-emoji/9a5261d871451f9b5183c93483cbd68ed916b1e9")
+kigold_download("${KIGOLD_NOTO_URL}/fonts/NotoEmoji-Regular.ttf"
+    415dc6290378574135b64c808dc640c1df7531973290c4970c51fdeb849cb0c5
+    "${KIGOLD_FONT_DIR}/NotoEmoji-Regular.ttf")
+kigold_download("${KIGOLD_NOTO_URL}/fonts/LICENSE"
+    6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2
+    "${KIGOLD_FONT_DIR}/NotoEmoji-LICENSE.txt")
+
+# PromptFont 1.5 (SIL Open Font License 1.1), https://github.com/Shinmera/promptfont
+# The project only publishes the font inside its release zip, so the zip is
+# downloaded and the font and its license are taken out of it.
+set(KIGOLD_PROMPTFONT_TTF_SHA256 f421290c042d4cbb384491f9ba095d1c71a098af29ac730fdc159b28b2462f69)
+set(KIGOLD_PROMPTFONT_LICENSE_SHA256 6c18ad8456572e565054d86e8bc5f444e760f77624aed710b7ba828c03af51ae)
+kigold_download("https://github.com/Shinmera/promptfont/releases/download/v1.5/promptfont.zip"
+    b7c4890998177f34a0c46363cb423e70c4d331216c7ffb7df6bc63b8ad3e86fc
+    "${KIGOLD_FONT_DIR}/promptfont-1.5.zip")
+file(ARCHIVE_EXTRACT INPUT "${KIGOLD_FONT_DIR}/promptfont-1.5.zip"
+    DESTINATION "${KIGOLD_FONT_DIR}/promptfont"
+    PATTERNS "promptfont.ttf" "LICENSE.txt")
+foreach(check "promptfont.ttf=${KIGOLD_PROMPTFONT_TTF_SHA256}" "LICENSE.txt=${KIGOLD_PROMPTFONT_LICENSE_SHA256}")
+    string(REPLACE "=" ";" check "${check}")
+    list(GET check 0 name)
+    list(GET check 1 want)
+    if (NOT EXISTS "${KIGOLD_FONT_DIR}/promptfont/${name}")
+        message(FATAL_ERROR "promptfont-1.5.zip has no ${name}. See docs/ASSETS.md.")
+    endif()
+    file(SHA256 "${KIGOLD_FONT_DIR}/promptfont/${name}" have)
+    if (NOT have STREQUAL want)
+        message(FATAL_ERROR "Wrong SHA-256 for ${name} from promptfont-1.5.zip. See docs/ASSETS.md.")
+    endif()
+endforeach()
+
+# Copy everything next to the exe on every build. A separate target, so that a
+# changed icon or style sheet is copied even when the exe itself does not relink.
+# The exe is written to the top of the build folder (single-config Ninja build).
+add_custom_target(KIGoldAssets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/menu" "${KIGOLD_ASSET_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${KIGOLD_ASSET_DIR}/promptfont"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${KIGOLD_FONT_DIR}/InterVariable.ttf"
+        "${KIGOLD_FONT_DIR}/InterVariable-LICENSE.txt"
+        "${KIGOLD_FONT_DIR}/NotoEmoji-Regular.ttf"
+        "${KIGOLD_FONT_DIR}/NotoEmoji-LICENSE.txt"
+        "${KIGOLD_ASSET_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${KIGOLD_FONT_DIR}/promptfont/promptfont.ttf"
+        "${KIGOLD_FONT_DIR}/promptfont/LICENSE.txt"
+        "${KIGOLD_ASSET_DIR}/promptfont"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/recompcontrollerdb.txt" "${CMAKE_BINARY_DIR}"
+    COMMENT "Copying menu assets and the controller database next to the exe"
+    VERBATIM)
+add_dependencies(KIGoldRecompiled KIGoldAssets)
 
 target_link_libraries(KIGoldRecompiled PRIVATE
     RecompiledFuncs

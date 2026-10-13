@@ -1,0 +1,9 @@
+/*
+  Killer Instinct Gold: Recompiled, the game's own menu style sheet.
+
+  RecompFrontend has its base styles built in and combines them with this file,
+  which it loads from assets/recomp.rcss next to the exe. We have no styles of
+  our own yet. The one empty rule below is here because the file has to contain
+  at least one style to be read (WM2K's file says so; not checked by us).
+*/
+.kigold-no-styles-yet {}

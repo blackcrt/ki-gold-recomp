@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
 
     kigold::register_overlays();
 
-    // The menu font. The file itself comes with the menu assets (not in the repo yet).
+    // The menu font. CMake downloads the file at configure time (see docs/ASSETS.md).
     recompui::register_primary_font("InterVariable.ttf", "Inter Variable");
 
     // One player for now. Two-player setup is a later decision (see NOTES.md).

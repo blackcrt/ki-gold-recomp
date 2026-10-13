@@ -84,6 +84,9 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/game/missing_funcs.cpp` | Loud stand-ins for the 3 serial-port libultra names the runtime does not provide. Two only log; `__osSiRawStartDma` answers as "nothing plugged in" |
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
 | `include/kigold_decls.h` | Declarations shared by our source files |
+| `menu/` | Our `recomp.rcss` and the 11 menu icons. The build copies it to `assets/` next to the exe. Not named `assets` because the guard blocks that name |
+| `recompcontrollerdb.txt` | Controller mappings for SDL, copied next to the exe |
+| `docs/ASSETS.md` | Source, license, pinned version and hash of every menu asset, and of the fonts CMake downloads at configure time (never committed) |
 | `patches/ui_funcs.h` | Header RecompFrontend expects in the game project. Do not delete; the build fails without it |
 | `COPYING` | The license: GPL-3.0 |
 | `requirements.txt` | Python tools for recon (splat), installed into `disasm/.venv` |
