@@ -127,18 +127,28 @@ static void set_frequency(uint32_t freq) {
     SDL_PauseAudioDevice(audio_device, 0);
 }
 
+// The most samples one real buffer can have. The game keeps a frame's length as a
+// signed 16-bit count of frames and passes that count times 4 as the byte length,
+// so the largest honest value is 0x7FFF * 4 bytes = 0xFFFE samples.
+constexpr size_t MAX_BUFFER_SAMPLES = 0xFFFE;
+// Both checks below log a few lines and then go quiet, so they cannot flood.
+constexpr int MAX_AUDIO_LOG_LINES = 5;
+
 static void queue_samples(int16_t* audio_data, size_t sample_count) {
+    // Safety net. A longer buffer cannot be real, and reading it would run off the
+    // end of the game's RAM (the crash of runs 4 and 5). Skip it: that frame is lost.
+    if (sample_count > MAX_BUFFER_SAMPLES) {
+        static int lines = 0;
+        if (lines < MAX_AUDIO_LOG_LINES) {
+            lines++;
+            fprintf(stderr, "[kigold][audio] IMPOSSIBLE LENGTH: queue_samples got %zu samples (0x%zX). BUFFER SKIPPED, not played%s\n",
+                sample_count, sample_count, lines == MAX_AUDIO_LOG_LINES ? " (no more of these lines)" : "");
+        }
+        return;
+    }
     // The game's samples arrive with left and right swapped (a side effect of how
     // the runtime stores big-endian memory), so swap each pair back.
     static std::vector<int16_t> swapped;
-    // Log only, nothing is changed. The game's sound code keeps a frame's length as
-    // a signed 16-bit count of 4-byte frames, so no real buffer has more than
-    // 0xFFFE samples. Run 4 crashed in the loop below; this line shows whether the
-    // cause was an impossible length (see NOTES.md, task 7i).
-    if (sample_count > 0xFFFE) {
-        fprintf(stderr, "[kigold][audio] IMPOSSIBLE LENGTH: queue_samples got %zu samples (0x%zX). The loop below will run off the end of RAM\n",
-            sample_count, sample_count);
-    }
     swapped.resize(sample_count);
     for (size_t i = 0; i + 1 < sample_count; i += 2) {
         swapped[i + 0] = audio_data[i + 1];
@@ -149,11 +159,42 @@ static void queue_samples(int16_t* audio_data, size_t sample_count) {
     }
 }
 
+// The most queued sound the game may be told about, in frames.
+//
+// Why a limit: the game's sound code (func_8002AED8, 0x8002AF24 to 0x8002AF64) works
+// out the next frame's length as (frameSize + 0x60 - frames still queued), keeps it
+// as a signed 16-bit number and checks it with an unsigned compare. Told about more
+// than frameSize + 0x60 frames, the result goes negative, the check misses it, and
+// the game hands us a 4 GB buffer one frame later (runs 4 and 5).
+//
+// Why this number: frameSize + 0x60 is the game's own largest buffer (it stores it
+// at 0x8006805C, set up at 0x8002AA5C to 0x8002AB18: one video frame of sound,
+// rounded up to 16, plus 0x60). It is the most the game ever gives the sound chip
+// in one go, and the largest value its sum can take. At 22050 Hz: 368 + 96 = 464.
+// A console never gets past it, because there the chip plays without pause and
+// the sound thread runs on every video frame. Our SDL queue has no such limit.
+static uint32_t max_reported_frames() {
+    uint32_t frame_size = (audio_rate + 59) / 60; // one video frame of sound, rounded up
+    frame_size = (frame_size + 15) & ~15u;        // rounded up to 16, as the game does
+    return frame_size + 0x60;
+}
+
 static size_t get_frames_remaining() {
     if (audio_device == 0) {
         return 0;
     }
-    return SDL_GetQueuedAudioSize(audio_device) / (audio_channels * sizeof(int16_t));
+    size_t queued = SDL_GetQueuedAudioSize(audio_device) / (audio_channels * sizeof(int16_t));
+    size_t limit = max_reported_frames();
+    if (queued > limit) {
+        static int lines = 0;
+        if (lines < MAX_AUDIO_LOG_LINES) {
+            lines++;
+            fprintf(stderr, "[kigold][audio] %zu frames are queued, telling the game %zu (its limit)%s\n",
+                queued, limit, lines == MAX_AUDIO_LOG_LINES ? " (no more of these lines)" : "");
+        }
+        return limit;
+    }
+    return queued;
 }
 
 // ---- Microcode ----

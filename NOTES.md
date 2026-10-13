@@ -2,6 +2,43 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Limit the reported sound queue, skip impossible buffers (Phase 2, task 7j)
+
+**Result: run 5 proved the 7i lead. Both agreed changes are in our sound callbacks in `src/main/main.cpp`. Build passes. The exe was not run**, so the fix is unproven until run 6 (ground rule 1). No game code and no generated code was touched.
+
+**Run 5** (`build-msvc/firstrun.log`): `IMPOSSIBLE LENGTH: queue_samples got 2147483584 samples (0x7FFFFFC0)`, then the run 4 crash again with the same callers. The reporter fixes of 7i worked too: frame #4 now prints as `not a game function`, and the "first page after RAM" NOTE appeared.
+- 0x7FFFFFC0 samples is a byte count of 0xFFFFFF80, which is `-32 << 2`. So the game's frame length was -32, exactly the kind of value 7i predicted.
+- Worked backwards through the game's sum, `(464 - queued) & 0xFFF0 = -32` means the game was told 481 to 496 frames were still queued. With the runtime's half-frame allowance that is about 576 frames in our SDL queue: only 26 ms, about 1.6 of the game's sound frames.
+
+**1. Limit in `get_frames_remaining`**
+- It now reports at most `frameSize + 0x60` frames, worked out from the sound rate the same way the game does: one video frame of sound (rate / 60, rounded up), rounded up to 16, plus 0x60. At 22050 Hz: 368 + 96 = **464 frames**.
+- Why that number: it is the game's own largest buffer (stored at 0x8006805C by `func_8002AA20`), so it is the most the game ever gives the sound chip in one go, and it is the largest value the game's sum `frameSize + 0x60 - queued` can take before going negative.
+- Check of the whole chain at the limit: we report 464 frames, the runtime turns that into bytes and takes off half a video frame (1856 - 367 = 1489), the game divides by 4 and gets 372, the sum gives 464 - 372 = 92, and the game raises that to its minimum of 352. Never negative.
+- Normal play is not affected: the game aims to keep about 96 frames queued, far under the limit. The limit only acts when sound piles up.
+- Honest gap: I did not confirm from hardware documents whether a console's length register counts one buffer or both of the two the chip can hold. The limit rests on the game's own code, which only works for values up to 464.
+- Logs `[kigold][audio] N frames are queued, telling the game 464 (its limit)`, at most 5 lines.
+
+**2. Safety net in `queue_samples`**
+- More than 0xFFFE samples (the most a signed 16-bit frame count times 4 can give) is refused: logged as `IMPOSSIBLE LENGTH ... BUFFER SKIPPED`, at most 5 lines, and the buffer is not read. With change 1 this should never print. If it does, the limit is not enough.
+
+**How the reference projects do it** (their public `src/main/main.cpp`, read this session, not copied)
+- WM2K: `get_frames_remaining` returns the plain SDL queue size in frames, no limit. Same as ours was. It also uses 512-frame SDL chunks like ours. Its comments say that game slows itself down when the queue is full.
+- Zelda64Recomp: converts sound to the device's rate, takes one video frame off the reported number, uses 256-frame chunks. No limit either.
+- So we now differ from both on purpose. Neither needs a limit because their games cope with a large number. KI Gold's sound code is the stock SDK audio manager, which does not.
+
+**Why is the queue that full so early? (from the code, not proven)**
+- It is not very full. The trouble starts at about 556 queued frames (25 ms). The first buffer alone is 464 frames and each later one at least 352, so two buffers that arrive close together are already over.
+- SDL does not drain smoothly. It takes sound out of the queue in chunks of 512 frames (`want.samples`), so the number we report jumps instead of falling steadily.
+- Bursts. In the runtime only one game thread runs at a time, and it only hands over at a libultra call such as `osRecvMesg` (`check_running_queue` in ultramodern `scheduling.cpp`). On a console the sound thread interrupts the main thread on every video frame. Here, while the main thread is busy without such calls (inflating stream 2 and the data block comes right before the crash in the log), the sound thread cannot run. The video frame messages wait in its queue (room for 8), and when the main thread finally lets go, the sound thread makes several frames back to back with no real time passing.
+- That last point is a reading of the code. Nothing measured it.
+
+**Commands**
+- Build: `Build OK`, no warnings from our file.
+
+**Next**
+- Run 6, same settings. Expected: maybe a few `frames are queued, telling the game 464` lines, no `IMPOSSIBLE LENGTH`, and the run gets further.
+- Later, not now: sound may lag behind for a few seconds after a burst (the game only catches up by about 15 frames per video frame). If that is audible, option 4 of 7i (frame timing) is the real cure.
+
 ## 2026-10-12: Run 4 crash is in our sound callback, strong lead is an impossible length (Phase 2, task 7i)
 
 **Result: the crash reporter worked. The crash is a read in our own `queue_samples` (`src/main/main.cpp`), called by the runtime's `osAiSetNextBuffer`. The strong lead is that the game handed over an impossible buffer length and our loop ran off the end of RAM, not that the game used an uncached address. Not proven, so the game crash is NOT fixed. Reporter label and a reporter bug fixed, one log-only line added. Build passes. The exe was not run.**
