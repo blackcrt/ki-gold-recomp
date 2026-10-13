@@ -2,6 +2,29 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Run 6, no crash, the game waits (Phase 2, end of session 3)
+
+**Result: the 7j audio cap works and the crash is gone. The game now hangs instead: the window stays open, blank and silent.** No code changes in this entry. Written from the coach chat at the end of the session.
+
+**Run 6** (same settings, `KIGOLD_VERIFY_INFLATE` set; log in `build-msvc/firstrun.log`)
+- Same start as run 5: stream1 loaded, VERIFY OK, entered stream1; stream2 loaded, VERIFY OK, entered stream2; data inflate to `0x802DEF10`.
+- Then the audio cap acted 5 times (the log limit): 816, 816, 656, 656, 496 frames queued, each reported to the game as 464. The queue was draining.
+- No `IMPOSSIBLE LENGTH`, no `MISSING`, no `CRASH`, no `osMapTLB` line.
+- **No stream3 load and no "entered stream3"**, although stream1 calls into stream3 at `0x8000FEF0`.
+- The window stayed open, blank, no sound.
+- **CPU use was 0 to 1%** in Task Manager over about 10 seconds. So a thread is waiting (for a message, interrupt, DMA or another thread), not spinning.
+- **The X button did not close the window.** It had to be force killed (`Stop-Process -Name KIGoldRecompiled -Force`). Fits a thread stuck waiting, since a clean shutdown waits for every game thread.
+- Exit code not recorded (force killed).
+
+**Stuck / unknown**
+- What the game waits for after the data inflate in `func_801AEE60_stream2` (or later in stream2_entry). The log cannot say.
+- Whether the audio thread keeps running after the 5 logged cap lines (the log limit hides it).
+
+**Next: task 7k**
+- Add a heartbeat, off by default, switched on by `KIGOLD_HEARTBEAT`. Every 2 seconds: each game thread (id, priority, state, and if waiting, the message queue address and the game function that called), plus counters (video interrupts, graphics tasks sent to the renderer, audio tasks, inflates). Our own `src/` files and hooks only, never `lib/`.
+- Static reading: list what the game most likely waits for right after the data inflate.
+- Then run 7 with the heartbeat on.
+
 ## 2026-10-12: Limit the reported sound queue, skip impossible buffers (Phase 2, task 7j)
 
 **Result: run 5 proved the 7i lead. Both agreed changes are in our sound callbacks in `src/main/main.cpp`. Build passes. The exe was not run**, so the fix is unproven until run 6 (ground rule 1). No game code and no generated code was touched.
