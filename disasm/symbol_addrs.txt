@@ -3,6 +3,8 @@
 // Names describe what the trace showed; they are ours, not original names.
 
 // Boot code
+// evidence (by hand): the entry point 0x80000400 clears memory, sets $sp, then loads this address into $t2 and does "jr $t2" (0x8000042C). Seven nops separate the two, and this address opens its own stack frame (addiu $sp, -0x20; sw $ra). So it is a separate function, reached only through a register
+func_80000450 = 0x80000450; // type:func
 boot_main = 0x80000520; // type:func
 boot_rom_read = 0x80000740; // type:func
 boot_inflate = 0x80000900; // type:func

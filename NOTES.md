@@ -2,6 +2,29 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: First run crash, missing function start at 0x80000450 (Phase 2, task 7f)
+
+**Result: the first run stopped with `Failed to find function at 0x80000450`. Cause found and fixed in the symbols. Regen and build pass. The exe was not run again**, so the fix is unproven until BlackCRT runs it (ground rule 1).
+
+**The first run** (BlackCRT, `build-msvc/firstrun.log`): RT64 found the graphics card, the runtime printed "Initializing recomp heap", then the error. No inflate lines, so it died before the first inflate.
+
+**Cause**
+- Who jumps there: the entry point itself. `func_80000400` (set as the entry in `kigold.toml` and `main.cpp`, both correct) clears memory, sets `$sp`, then does `lui $t2, 0x8000` / `addiu $t2, $t2, 0x450` / `jr $t2` at 0x8000042C.
+- A `jr` through a register becomes `LOOKUP_FUNC(ctx->r10)` in the generated code: the runtime looks the address up in its table of function starts.
+- 0x80000450 was not missing, it was the middle of a function. splat had made one function from 0x80000400 to 0x800004AC and marked 0x80000450 only as an inner label (`alabel D_80000450`). The table only holds function starts, so the lookup failed.
+- It really is its own function: seven nops sit between the `jr` and 0x80000450, and 0x80000450 opens its own stack frame (`addiu $sp, -0x20`, `sw $ra`), calls `osInitialize`, creates and starts thread 1 (entry `func_800004AC`), and returns with `jr $ra`. This is the usual libultra start: a tiny entry stub that jumps to the boot function.
+
+**The fix**
+- One line in `disasm/symbol_addrs.txt`: `func_80000450 = 0x80000450; // type:func`, with the evidence in a comment. The name is the plain default, nothing invented.
+- `python3 tools/regen.py`: exit 0. `syms/dump.toml`: `func_80000400` is now 0x34 bytes, new `func_80000450` is 0x5C bytes. 1434 functions became 1435. `RecompiledFuncs/recomp_overlays.inl` now lists `func_80000450` at offset 0x50.
+- Build: `Build OK`, exe linked.
+
+**Stuck / unknown**
+- Other places may jump through a register into the middle of a function. `gen_symbols.py` already counts inner labels inside functions (`func_entries`); if the same error shows with another address, check that address the same way first.
+
+**Next**
+- BlackCRT runs the exe again with `KIGOLD_VERIFY_INFLATE` set.
+
 ## 2026-10-12: Menu assets and controller database (Phase 2, task 7e)
 
 **Result: the build now puts a complete `assets` folder and `recompcontrollerdb.txt` next to the exe. Build passes. The exe was not run**, so whether the launcher really draws is still unproven (ground rule 1).

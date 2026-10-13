@@ -8,7 +8,8 @@ vram = 0x80000400
 size = 0x6160
 
 functions = [
-    { name = "func_80000400", vram = 0x80000400, size = 0xAC },
+    { name = "func_80000400", vram = 0x80000400, size = 0x34 },
+    { name = "func_80000450", vram = 0x80000450, size = 0x5C },
     { name = "func_800004AC", vram = 0x800004AC, size = 0x74 },
     { name = "boot_main", vram = 0x80000520, size = 0xCC },
     { name = "func_800005EC", vram = 0x800005EC, size = 0xB8 },
