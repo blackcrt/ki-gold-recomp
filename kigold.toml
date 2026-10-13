@@ -80,3 +80,16 @@ text = "{ extern void kigold_on_inflate_start(uint8_t* rdram, recomp_context* ct
 func = "boot_inflate"
 before_vram = 0x80000950
 text = "{ extern void kigold_on_inflate_end(uint8_t* rdram, recomp_context* ctx); kigold_on_inflate_end(rdram, ctx); }"
+
+# Start of each code stream's first function: one log line, to show how far a run gets.
+[[patches.hook]]
+func = "stream1_entry"
+text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx, int stream); kigold_on_stream_entry(rdram, ctx, 1); }"
+
+[[patches.hook]]
+func = "stream2_entry"
+text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx, int stream); kigold_on_stream_entry(rdram, ctx, 2); }"
+
+[[patches.hook]]
+func = "stream3_entry"
+text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx, int stream); kigold_on_stream_entry(rdram, ctx, 3); }"

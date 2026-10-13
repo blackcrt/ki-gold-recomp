@@ -2,6 +2,37 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Second run, the VERIFY check was wrong and caused the crash (Phase 2, task 7g)
+
+**Result: the 0x80000450 fix worked. The second run's "stream1 WRONG" and the silent exit (0xC0000005) both came from a bug in our own VERIFY check, not from the game's inflate. Fixed. Regen and build pass. The exe was not run again**, so whether the inflate is right is still unproven (ground rule 1).
+
+**The second run** (BlackCRT): stream1 loaded, `VERIFY: stream1 WRONG, 183963 of 0x3A7A0 bytes differ, first at 0x8000F960`, stream2 loaded, then a silent exit with code -1073741819 (0xC0000005, access violation).
+
+**1. The VERIFY check**
+- Byte order was handled correctly: the check reads RAM with `MEM_B`, which flips the address with `^ 3`.
+- The bug was the address type. The line was `MEM_B(i, (int32_t)stream.ram)` with an unsigned 32-bit `i`. In C++ a signed 32-bit plus an unsigned 32-bit gives an unsigned 32-bit, so the address is not sign-extended to 64 bits. The macro then subtracts `0xFFFFFFFF80000000`, and the result is 4 GB too high.
+- Proof: the same expression in a small standalone test gives offset 0x10000F963 as written and 0xF963 with a 64-bit address. The runtime reserves exactly 4 GB for game memory (`allocation_size` in `librecomp/addresses.hpp`), so the check read memory outside that block: something unrelated for stream1, and unmapped memory for stream2.
+- Counts worked out from `build/kigold.decompressed.z64` for stream1: 219210 bytes would differ with a byte-order mistake, 180446 if RAM were all zero. The log said 183963, so neither; the check was reading mostly empty memory that is not game RAM.
+- The stream table lookup (`MEM_W(8 * i, STREAM_TABLE)`) is fine: both sides are signed there. `missing_funcs.cpp` is fine: it uses the 64-bit register value.
+- Fix: `gpr ram = (gpr)(int32_t)stream.ram;` and `MEM_B(i, ram)`, with a comment. **Rule for our code: an address given to a `MEM_` macro must be a `gpr` (or come straight from `ctx->rN`).**
+- Read on paper and found sound: the runtime's `osPiStartDma` adds the ROM base to the plain ROM offset the game passes, the overlay loader never writes to game RAM, and the inflate functions (0x80000960 to 0x80001DF0) have no register jumps or inner labels.
+
+**2. Why `ra=0x00000000`**
+- N64Recomp turns `jal` into a plain C call and never writes the return address into `ctx->r31`. The generated code only reads `r31` back from the stack. So it is still the 0 the thread started with. It can never tell us the caller, so `ra` is removed from the log lines.
+
+**3. The silent exit**
+- 0xC0000005 is a Windows access violation: a read or write of memory that is not mapped.
+- No VERIFY line was printed for stream2, so it died after "stream2 loaded" and before the check finished. Likeliest cause by far: the check itself, reading 0xE8B40 bytes at 4 GB past stream2. Without `KIGOLD_VERIFY_INFLATE` set this crash would not have happened.
+- Not proven: that nothing else goes wrong after stream2. What comes next is stream1 calling 0x801ACB20 through a register.
+- New log line for that: `[kigold][entry] entered streamN at 0x...`, printed at the start of `stream1_entry`, `stream2_entry` and `stream3_entry` (three `[[patches.hook]]` entries in `kigold.toml`, function `kigold_on_stream_entry`). It stops after 32 lines.
+
+**Commands**
+- `python3 tools/regen.py`: exit 0, the three new hook lines are in the generated code.
+- Build: `Build OK`.
+
+**Next**
+- Third run with `KIGOLD_VERIFY_INFLATE` set. Expected: `VERIFY: stream1 OK`, `entered stream1`, `stream2 loaded`, `VERIFY: stream2 OK`, `entered stream2`. If VERIFY still says WRONG, the inflate is really wrong this time.
+
 ## 2026-10-12: First run crash, missing function start at 0x80000450 (Phase 2, task 7f)
 
 **Result: the first run stopped with `Failed to find function at 0x80000450`. Cause found and fixed in the symbols. Regen and build pass. The exe was not run again**, so the fix is unproven until BlackCRT runs it (ground rule 1).

@@ -10,6 +10,7 @@
 //   kigold_on_rom_read       start of boot_rom_read (0x80000740) and func_800007B4
 //   kigold_on_inflate_start  start of boot_inflate (0x80000900)
 //   kigold_on_inflate_end    just before boot_inflate returns (0x80000950)
+//   kigold_on_stream_entry   start of stream1_entry, stream2_entry, stream3_entry
 //
 // A stream is only accepted when both ends agree: the destination address, and
 // the ROM offset the source buffer was last filled from, checked against the
@@ -114,8 +115,12 @@ namespace {
         }
         uint32_t bad = 0;
         uint32_t first_bad = 0;
+        // The address must be a sign-extended 64-bit value, as in a register. With a
+        // 32-bit address and an unsigned index the sum is not sign-extended, and
+        // MEM_B then reads 4 GB past the byte that was meant.
+        gpr ram = (gpr)(int32_t)stream.ram;
         for (uint32_t i = 0; i < stream.size; i++) {
-            uint8_t in_ram = (uint8_t)MEM_B(i, (int32_t)stream.ram);
+            uint8_t in_ram = (uint8_t)MEM_B(i, ram);
             if (in_ram != (*image)[stream.section_rom + i]) {
                 if (bad == 0) {
                     first_bad = stream.ram + i;
@@ -144,7 +149,6 @@ extern "C" void kigold_on_rom_read(uint8_t* rdram, recomp_context* ctx) {
 extern "C" void kigold_on_inflate_start(uint8_t* rdram, recomp_context* ctx) {
     uint32_t src = (uint32_t)ctx->r4;
     uint32_t dst = (uint32_t)ctx->r5;
-    uint32_t ra = (uint32_t)ctx->r31;
 
     bool rom_known = false;
     uint32_t rom_offset = 0;
@@ -180,20 +184,20 @@ extern "C" void kigold_on_inflate_start(uint8_t* rdram, recomp_context* ctx) {
         }
         load_overlays(stream.section_rom, (int32_t)stream.ram, stream.size);
         pending_stream = by_dst;
-        fprintf(stderr, "[kigold][inflate] dst=0x%08X rom=%s ra=0x%08X: %s loaded\n", dst, rom_text, ra, stream.name);
+        fprintf(stderr, "[kigold][inflate] dst=0x%08X rom=%s: %s loaded\n", dst, rom_text, stream.name);
     }
     else if (by_dst >= 0) {
         fprintf(stderr,
-            "[kigold][inflate] WARNING dst=0x%08X rom=%s ra=0x%08X: destination is where %s goes, but the source is not that stream. NOTHING LOADED OR UNLOADED\n",
-            dst, rom_text, ra, STREAMS[by_dst].name);
+            "[kigold][inflate] WARNING dst=0x%08X rom=%s: destination is where %s goes, but the source is not that stream. NOTHING LOADED OR UNLOADED\n",
+            dst, rom_text, STREAMS[by_dst].name);
     }
     else if (by_src >= 0) {
         fprintf(stderr,
-            "[kigold][inflate] WARNING dst=0x%08X rom=%s ra=0x%08X: source is %s, but the destination is not its address. NOTHING LOADED OR UNLOADED\n",
-            dst, rom_text, ra, STREAMS[by_src].name);
+            "[kigold][inflate] WARNING dst=0x%08X rom=%s: source is %s, but the destination is not its address. NOTHING LOADED OR UNLOADED\n",
+            dst, rom_text, STREAMS[by_src].name);
     }
     else {
-        fprintf(stderr, "[kigold][inflate] dst=0x%08X rom=%s ra=0x%08X: data\n", dst, rom_text, ra);
+        fprintf(stderr, "[kigold][inflate] dst=0x%08X rom=%s: data\n", dst, rom_text);
     }
 }
 
@@ -204,4 +208,25 @@ extern "C" void kigold_on_inflate_end(uint8_t* rdram, recomp_context* ctx) {
     if (stream >= 0) {
         verify_stream(rdram, STREAMS[stream]);
     }
+}
+
+// The game has jumped into the first function of a code stream. Log only, to
+// show how far a run gets. Stops after MAX_ENTRY_LINES so a stream that is
+// entered again and again cannot flood the log.
+extern "C" void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx, int stream) {
+    (void)rdram;
+    (void)ctx;
+    constexpr int MAX_ENTRY_LINES = 32;
+    static int lines = 0;
+    std::lock_guard lock{ state_mutex };
+    if (lines > MAX_ENTRY_LINES || stream < 1 || stream > 3) {
+        return;
+    }
+    if (lines == MAX_ENTRY_LINES) {
+        fprintf(stderr, "[kigold][entry] more stream entries follow, not logged\n");
+    }
+    else {
+        fprintf(stderr, "[kigold][entry] entered %s at 0x%08X\n", STREAMS[stream - 1].name, STREAMS[stream - 1].ram);
+    }
+    lines++;
 }

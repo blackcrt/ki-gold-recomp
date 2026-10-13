@@ -82,7 +82,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime |
 | `src/game/tlb.cpp` | `osMapTLB` and `osUnmapTLB` for the runtime. Log only for now |
 | `src/game/missing_funcs.cpp` | Loud stand-ins for the 3 serial-port libultra names the runtime does not provide. Two only log; `__osSiRawStartDma` answers as "nothing plugged in" |
-| `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
+| `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3, and logs when the game enters each stream. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
 | `include/kigold_decls.h` | Declarations shared by our source files |
 | `menu/` | Our `recomp.rcss` and the 11 menu icons. The build copies it to `assets/` next to the exe. Not named `assets` because the guard blocks that name |
 | `recompcontrollerdb.txt` | Controller mappings for SDL, copied next to the exe |
