@@ -72,6 +72,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `tools/unpack_rom.py` | Builds the decompressed ROM for splat and N64Recomp (output in `build/`, never committed) |
 | `kigold.toml` | N64Recomp config: ROM, symbol file, output folder, and the stub list with a reason for each |
 | `rsp/kigold_audio.toml` | RSPRecomp config for the audio microcode. Its output `rsp/kigold_audio.cpp` is generated, never committed |
+| `tools/gen_symbols.py` | Writes `syms/dump.toml` from the split. Its `KEEP_GAME_CODE` list names proven libultra functions that N64Recomp must translate from the game's own code (written with `_game` added) |
 | `tools/regen.py` | Regenerates `RecompiledFuncs/` and `rsp/kigold_audio.cpp` in one command (unpack check, split, symbols, N64Recomp, cleanup, RSPRecomp, report) |
 | `tools/fix_fallthroughs.py` | Cleanup step: chains functions that fall through into the next one. Run by `regen.py` |
 | `lib/` | Git submodules: N64ModernRuntime, RecompFrontend, rt64, at fixed pins. Never edit or copy files from here. Fresh clone: `git submodule update --init --recursive --depth 1` |
@@ -80,7 +81,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/main/main.cpp` | Program start: describes the game to the runtime, sets up window, sound, input, then starts it |
 | `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime |
 | `src/game/tlb.cpp` | `osMapTLB` and `osUnmapTLB` for the runtime. Log only for now |
-| `src/game/missing_funcs.cpp` | Loud log-only bodies for the 5 libultra names the runtime does not provide |
+| `src/game/missing_funcs.cpp` | Loud log-only bodies for the 3 serial-port libultra names the runtime does not provide |
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
 | `include/kigold_decls.h` | Declarations shared by our source files |
 | `patches/ui_funcs.h` | Header RecompFrontend expects in the game project. Do not delete; the build fails without it |

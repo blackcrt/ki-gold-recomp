@@ -99,6 +99,14 @@ def fails(**kwargs) -> bool:
     return False
 
 
+def kept_fails(sections: list, keep: set) -> bool:
+    try:
+        gen_symbols.check_kept(sections, keep)
+    except SymbolError:
+        return True
+    return False
+
+
 def main() -> int:
     sections, named = run()
     parsed = tomllib.loads(gen_symbols.render(sections))["section"]
@@ -155,6 +163,13 @@ def main() -> int:
         ("a raw block in a traced section is refused", fails(**traced_args(files=raw_file))),
         ("a missing code piece of a traced section is refused",
          fails(**traced_args(files={"4000.s": TRACED_FILES["4000.s"]}))),
+        ("a kept name is written with the suffix, the others are unchanged",
+         [f["name"] for f in tomllib.loads(gen_symbols.render(sections, {"last"}))["section"][0]["functions"]]
+         == ["first", "func_80000410", "last_game"]),
+        ("a kept name that is not in the split is refused", kept_fails(sections, {"nowhere"})),
+        ("a kept name whose new name is taken is refused",
+         kept_fails([SimpleNamespace(funcs=[SimpleNamespace(name="a"), SimpleNamespace(name="a_game")])], {"a"})),
+        ("a kept name that is in the split is accepted", not kept_fails(sections, {"last"})),
     ]
     for name, ok in checks:
         print(f"{'ok  ' if ok else 'FAIL'}  {name}")

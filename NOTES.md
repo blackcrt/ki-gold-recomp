@@ -2,6 +2,63 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: CRC functions translated from the game, serial-port callers checked (Phase 2, task 7c)
+
+**Result: the two CRC functions now run the game's own code. Regen and build pass. The exe was not run.** The three serial-port stand-ins are unchanged (log only); what to do with them is an open decision. The TLB functions were not touched.
+
+**Part A: `__osContAddressCrc` (`0x80041210`) and `__osContDataCrc` (`0x800412C0`)**
+- Why they were skipped: N64Recomp has a built-in list of libultra names (`src/symbol_lists.cpp`). A function whose name is on it gets `_recomp` added and no body, because the runtime is expected to supply it. The match is by exact name.
+- There is no config setting that takes a name off that list. `[patches] renamed` only adds the `_recomp` suffix and `ignored` only skips (read in N64Recomp's `src/main.cpp` and `src/config.cpp`).
+- So the fix is a name that is not on the list. `tools/gen_symbols.py` has a new short list, `KEEP_GAME_CODE`, with these two names. When it writes `syms/dump.toml` it adds `_game` to them: `__osContAddressCrc_game`, `__osContDataCrc_game`. The proven names stay as they are in `disasm/symbol_addrs.txt`. The tool refuses to run if a listed name is not in the split. Its test went from 26 to 30 checks.
+- `_game` is our marker, not a libultra name. It only says "translated from the game's code".
+- Checked in the generated code after regen: both functions have real bodies (stack arithmetic only, no calls out), all 6 call sites call the new names, and no call to the old `_recomp` names is left.
+- The two log-only bodies are gone from `src/game/missing_funcs.cpp`. The build links without them, which confirms nothing asks for them any more.
+- Effect: the save checksum (`func_801CD08C_stream2`, `func_801CD1C4_stream2`) now gets a real result. Not proven until a run.
+
+**Part B: the 7 callers of `__osSiGetAccess`, `__osSiRelAccess`, `__osSiRawStartDma`**
+- **None can be named.** The reference library has the Controller Pak objects (`pfsinit`, `pfsisplug`, `pfsgetstatus`, `contramread`, `contramwrite` and more, in up to three library versions). The fingerprint tool compared every game function against them and none of the 7 is an exact match. They are not even in the "likely" list. KI Gold's copies are most likely from an older library version than our references.
+- Naming would not help anyway for most of them: the runtime at our pin has no body for `osPfsInit`, `osPfsIsPlug`, `__osPfsGetStatus`, `__osContRamRead` or `__osContRamWrite`. It only has the higher-level ones (`osPfsInitPak`, `osPfsFindFile` and so on, all answering "no pak").
+- What each one does, from reading the code. The "looks like" column is a lead only, not a name.
+
+| Function | What it does | Looks like | Serial-port calls |
+| --- | --- | --- | --- |
+| `func_800343F4` (queue, port) | sends a status request, waits for the reply, returns 0, 1, 2 or 4 | a pak status check | `RawStartDma` twice, each followed by a blocking `osRecvMesg` |
+| `func_80034350` (queue, struct, port) | calls `func_800343F4`, on 0 fills the struct | a pak start | `GetAccess`, `RelAccess` |
+| `func_80034020` (queue, result) | asks all ports, up to 3 tries, writes one bit per port with a pak | a "which ports have a pak" check | all three. No direct call to it in any segment |
+| `func_8003BF10` | reads one 32-byte block, checks its CRC, up to 3 tries | a pak block read | all three, plus `__osContDataCrc` |
+| `func_8003C2A0` | same call pattern as the read (not read line by line) | a pak block write | all three, plus `__osContDataCrc` |
+| `func_8003C13C`, `func_8003C4C4` | build the request bytes for the read and the write | request builders | none. They only call `__osContAddressCrc`, which is real code now |
+
+**What happens at the first run**
+- **Most likely none of the three is ever called.** The only way in from the game is `func_801CCF4C_stream2`. It first asks which ports have a pak (`func_801CCBA0_stream2`), and that goes through `osContStartQuery` and `osContGetQuery`, which the runtime replaces. The runtime fills the status from what `main.cpp` reports, and we report no pak, so the status is 0 and no port bit is set. `func_80034350` is only called for a port whose bit just turned on.
+- The file search (`func_801CD3A4_stream2`, which calls `func_800344D0`) is skipped too when the port bit is clear. Checked at one call site (`0x801CD6FC`). The other sites (`0x801CD9CC`, `0x801CDC84`) follow a call to `func_801CCF4C_stream2` in the same way but were not read line by line.
+- This is static reading only. A `[kigold][MISSING]` line in the first run log would prove it wrong.
+
+| Stand-in | If it is reached anyway | Why |
+| --- | --- | --- |
+| `__osSiGetAccess`, `__osSiRelAccess` | Harmless | They only take and release a lock on the serial port. Doing nothing is fine with one caller at a time |
+| `__osSiRawStartDma` | **Hang** | Every caller then waits in a blocking `osRecvMesg` for the "done" message, and nobody sends it. That game thread never wakes |
+| `func_8003C13C`, `func_8003C4C4` | Harmless | Plain code, no hardware |
+
+**Suggested safe stand-in (not done, needs a decision)**
+- `__osSiGetAccess` and `__osSiRelAccess`: do nothing, keep one log line.
+- `__osSiRawStartDma`: answer like a console with nothing plugged in, then send the "done" message with the runtime's own `ultramodern::send_si_message()` and return 0. For a read (first argument 0) that means walking the 64-byte request buffer and setting the "no response" bit (bit 7 of the receive length) on every command. Keep the loud log line.
+- Expected effect: `func_800343F4` returns 1 (no pak), the block read and write give up after their retries with an error, and no thread waits forever.
+- Not checked yet: `func_80034294`, which unpacks the reply for `func_800343F4`, was not read. It must be read before writing the stand-in.
+- Just sending the message without touching the buffer is not safe: the game would read back its own request bytes as the reply.
+
+**Regen and build**
+- `python3 tools/test_gen_symbols.py`: 30/30.
+- `python3 tools/regen.py`: exit 0. `syms/dump.toml` changed by two lines (the two names). The call report still lists `__osSiGetAccess_recomp` 4, `__osSiRawStartDma_recomp` 8, `__osSiRelAccess_recomp` 6.
+- `tools/build.ps1 -Build`: exit 0, `KIGoldRecompiled.exe` linked, no errors, no undefined names.
+
+**Stuck / unknown**
+- Whether `func_80034020` is reached through a pointer. No direct call exists.
+- Everything else in the 7a/7b entry still stands.
+
+**Next**
+- Decision on the `__osSiRawStartDma` stand-in, the menu assets decision, then the first run with `KIGOLD_VERIFY_INFLATE` set.
+
 ## 2026-10-12: Inflate hooks, and the ROM question settled (Phase 2, tasks 7a and 7b)
 
 **Result: the hooks are in, regen and build pass. The exe was not run.** Nothing here is proven until the first run shows the log lines (ground rule 1).

@@ -23,9 +23,13 @@ What it refuses to write (exit 1):
   - a size that disagrees with the size splat printed for the function
   - a name used twice
   - a function named in symbol_addrs.txt that is missing or at another address
+  - a name in KEEP_GAME_CODE that is not in the split
   - for a traced section: code and data pieces in kigold.yaml that differ from
     the tracer's, a traced function that is not inside a code piece, or a raw
     block left in splat's output
+
+Names in KEEP_GAME_CODE are written with GAME_CODE_SUFFIX added, so that
+N64Recomp translates the game's own code for them (see the comment there).
 
 What it reports but cannot fix: code that is in no function. Blocks splat
 wrote as raw words (dlabel) and extra entry labels (alabel) are counted per
@@ -47,6 +51,18 @@ ASM_LINE = re.compile(r"\s*/\* [0-9A-Fa-f]+ ([0-9A-Fa-f]{8}) [0-9A-Fa-f]{8} \*/"
 NONMATCHING = re.compile(r"nonmatching (\S+), (0x[0-9A-Fa-f]+)")
 SYMBOL_LINE = re.compile(r"\s*(\w+)\s*=\s*(0x[0-9A-Fa-f]+)\s*;\s*//(.*)")
 DEFAULT_NAME = re.compile(r"func_[0-9A-F]{8}(_\w+)?$")     # a name splat would give anyway
+
+# Proven libultra functions whose own code in the game must be translated.
+# N64Recomp skips every function whose name is on its built-in libultra lists
+# (src/symbol_lists.cpp) and leaves the body to the runtime. The runtime at our
+# pin has no body for these, and N64Recomp has no setting that takes a name off
+# its lists. So the symbol file gives them a name that is not on the lists.
+# The proven names stay as they are in symbol_addrs.txt.
+KEEP_GAME_CODE = frozenset({
+    "__osContAddressCrc",          # plain arithmetic, called by game code
+    "__osContDataCrc",             # plain arithmetic, used by the save checksum
+})
+GAME_CODE_SUFFIX = "_game"
 
 
 class SymbolError(Exception):
@@ -238,13 +254,24 @@ def check_named(sections: list, named: dict) -> None:
             raise SymbolError(f"{name} is at 0x{found[name]:08X} in the split, 0x{vram:08X} in symbol_addrs.txt")
 
 
-def render(sections: list) -> str:
+def check_kept(sections: list, keep) -> None:
+    found = {f.name for sec in sections for f in sec.funcs}
+    for name in sorted(keep):
+        if name not in found:
+            raise SymbolError(f"{name} is in KEEP_GAME_CODE but not in the split")
+        if name + GAME_CODE_SUFFIX in found:
+            raise SymbolError(f"{name + GAME_CODE_SUFFIX} is already a function name")
+
+
+def render(sections: list, keep=frozenset()) -> str:
+    """keep: names written with GAME_CODE_SUFFIX (see KEEP_GAME_CODE)."""
     out = ["# Generated from the splat disassembly by tools/gen_symbols.py. Do not edit by hand.",
            "# Names, addresses and sizes only."]
     for sec in sections:
         out += ["", "[[section]]", f'name = "{sec.name}"', f"rom = 0x{sec.rom:08X}",
                 f"vram = 0x{sec.vram:08X}", f"size = 0x{sec.size:X}", "", "functions = ["]
-        out += [f'    {{ name = "{f.name}", vram = 0x{f.vram:08X}, size = 0x{f.size:X} }},' for f in sec.funcs]
+        out += [f'    {{ name = "{f.name + GAME_CODE_SUFFIX if f.name in keep else f.name}", '
+                f'vram = 0x{f.vram:08X}, size = 0x{f.size:X} }},' for f in sec.funcs]
         out += ["]"]
     return "\n".join(out) + "\n"
 
@@ -307,11 +334,12 @@ def main() -> int:
         sections, named = generate(config, base / config["options"]["asm_path"],
                                    (base / config["options"]["symbol_addrs_path"]).read_text(),
                                    {"stream3": stream3_map.trace_rom()})
+        check_kept(sections, KEEP_GAME_CODE)
     except SymbolError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
     args.out.parent.mkdir(exist_ok=True)
-    args.out.write_text(render(sections), newline="\n")
+    args.out.write_text(render(sections, KEEP_GAME_CODE), newline="\n")
     print(report(sections, named))
     print(f"\nwrote {args.out}")
     return 0
