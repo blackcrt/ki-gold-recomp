@@ -2,6 +2,55 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Run 4 crash is in our sound callback, strong lead is an impossible length (Phase 2, task 7i)
+
+**Result: the crash reporter worked. The crash is a read in our own `queue_samples` (`src/main/main.cpp`), called by the runtime's `osAiSetNextBuffer`. The strong lead is that the game handed over an impossible buffer length and our loop ran off the end of RAM, not that the game used an uncached address. Not proven, so the game crash is NOT fixed. Reporter label and a reporter bug fixed, one log-only line added. Build passes. The exe was not run.**
+
+**Run 4** (`build-msvc/firstrun.log`): thread "game", READ of N64 0xA0000002 at `KIGoldRecompiled.exe + 0x2F40`, callers 0x800398E0, 0x8002AED8, 0x8002AD74, then "0x801CD324, 0x556B3 bytes in".
+
+**1. What is at exe + 0x2F40** (from `build-msvc/KIGoldRecompiled.map`)
+- `queue_samples` in our `main.cpp` (starts at 0x2E60, so 0xE0 bytes in): the loop that swaps left and right. It reads `audio_data[i + 1]` first, which is why the address ends in 2.
+- Caller #1, 0x800398E0, is `osAiSetNextBuffer` (proven name in `syms/dump.toml`). The map shows the code that ran is the runtime's `osAiSetNextBuffer_recomp` (librecomp `ai.cpp`). It passes the game's two arguments (buffer, byte count) to `queue_audio_buffer`, which calls our `queue_samples(pointer, byte count / 2)`.
+
+**2. Reporter label**: fixed. 0xA0000000 to 0xA07FFFFF now prints as uncached RAM (KSEG1), same memory as 0x80000000, not mirrored by the runtime. 0xA0800000 up stays "hardware or cartridge".
+
+**3. Where 0xA0000002 comes from**
+- The callers are the standard N64 SDK audio manager, almost line for line: `func_8002AA20` sets it up, `func_8002AD74` is its thread loop, `func_8002AED8` handles one sound frame. (Leads only, no names added.)
+- `func_8002AED8` calls `osAiSetNextBuffer(lastInfo->data, lastInfo->frameSamples << 2)` at 0x8002AF14. `lastInfo` is the previous frame's record.
+- `data` comes from `alHeapDBAlloc` on the heap the game sets up at 0x8002A3A4: base 0x80128240, length 0x4B380. A normal cached address. If the heap were full the result would be 0, not 0xA0000000.
+- Nothing on this path builds an uncached address. There is no `lui 0xA000` or K0-to-K1 conversion in these functions. So "the game reads uncached RAM on purpose" and "a null pointer turned into an uncached address" both have no code behind them.
+- What 0xA0000000 really is here: the runtime makes exactly 512 MB readable (`recomp::mem_size`), and 0x80000000 + 512 MB = 0xA0000000. It is the first byte after the end of readable memory. A loop that starts at a good buffer and does not stop faults exactly there, at +2 because of our read order.
+- Why the loop would not stop: the length. `frameSamples` is a signed 16-bit field. `func_8002AED8` computes it at 0x8002AF24 to 0x8002AF64 as `(frameSize - osAiGetLength() / 4 + 0x60) & 0xFFF0`, stores it with `sh`, reads it back signed with `lh`, and compares it to the minimum with an unsigned compare (`sltu`). With 22050 Hz, frameSize is 368. If `osAiGetLength` reports more than 464 frames still queued, the result goes negative, the unsigned compare does not catch it, and the next frame passes `negative << 2`, about 4 GB, as the byte count. Our `queue_samples` then resizes its buffer to about 2 billion samples and walks to the end of RAM.
+- On a console the sound chip holds at most two buffers, so the queued amount stays small. The runtime's `osAiGetLength` reports whatever our SDL queue holds (minus half a frame), with no upper limit. Two or three frames queued in a burst at start is enough (about 556 frames).
+- **Not proven.** The log has no length in it. The alternative (the pointer itself was 0xA0000000) cannot be ruled out from run 4 alone, it just has no known source.
+
+**4. The 0x801CD324 frame: not real**
+- The map says that address is the runtime's `run_thread_function` (librecomp `recomp.cpp`), which is right: it is what starts a game thread.
+- Reporter bug: the lookup only knows where each function starts and took the nearest start below the address. The table also holds runtime functions (the libultra replacements), which sit elsewhere in the exe, so runtime code between two table entries was credited to the entry below it. "0x556B3 bytes in" for a 0x80 byte function was the giveaway.
+- Fix: the match now only counts if Windows' own function table (the unwind data) says the address is in the same function. Wording changed from "generated function" to "game function", because for a libultra name the code that runs is the runtime's version. The last line of the report now names both lookup files.
+- New NOTE line: when the address is in the first page after the 512 MB, the report says to check for a loop that ran off the end of RAM.
+
+**5. KSEG1 in the runtime and elsewhere**
+- Runtime (read in our pinned `lib/N64ModernRuntime`): every memory access is `rdram + (address - 0x80000000)`. There is no mirror: 0xA0000000 + x lands 512 MB + x into the 4 GB block, which is not readable. Only `osVirtualToPhysical` and the cartridge (PI) functions know about KSEG1 addresses.
+- Other recomps: not checked this session, their source is not in the repo. From memory only (unverified): they do not mirror KSEG1 either and deal with single cases by patching the game function. Check `docs/WM2K.md` sources before relying on this.
+- Options if KI Gold does turn out to use KSEG1 somewhere: (a) patch that game function through `kigold.toml` so the address is converted first; (b) convert at the edge in our own callbacks where the game hands us a pointer; (c) a real mirror of RAM at +512 MB, which needs runtime changes we do not make in `lib/`; (d) catch the fault and redo the access, complex and slow. Lean: (a) or (b), case by case. Nothing points to KSEG1 being used so far.
+
+**Log line added (log only, no behaviour change)**
+- `queue_samples` prints `[kigold][audio] IMPOSSIBLE LENGTH: ...` when it gets more than 0xFFFE samples (the most a signed 16-bit frame count times 4 can give). Run 5 then says yes or no to the lead.
+
+**Options for the game crash, once run 5 confirms the length** (none done)
+1. Limit what our `get_frames_remaining` reports, so the game never sees more queued sound than a console could hold. Small, in our own callback, fixes the cause on our side.
+2. Refuse impossible lengths in `queue_samples` with a loud log. Stops the crash but the game has already computed a bad frame. Good as a safety net next to option 1.
+3. Patch the game's `func_8002AED8` to clamp the value. Touches game logic, most work.
+4. Find out why sound queues up at start (frame timing) and fix that. Right in the long run, but open-ended.
+- Lean: 1 plus 2.
+
+**Commands**
+- Build: `Build OK`, no warnings from our files.
+
+**Next**
+- Run 5, same settings. Look for the `[kigold][audio] IMPOSSIBLE LENGTH` line before the crash block.
+
 ## 2026-10-12: Third run crash, crash reporter added (Phase 2, task 7h)
 
 **Result: the 7g fixes worked (both streams VERIFY OK, both entered). The third run then died silently with 0xC0000005 after the first data inflate. A crash reporter is added so the next run says where and why. Build passes. The exe was not run**, so the reporter itself is unproven until run 4 (ground rule 1). Nothing in the game path was changed.

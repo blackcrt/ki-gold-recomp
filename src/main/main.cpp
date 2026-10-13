@@ -131,6 +131,14 @@ static void queue_samples(int16_t* audio_data, size_t sample_count) {
     // The game's samples arrive with left and right swapped (a side effect of how
     // the runtime stores big-endian memory), so swap each pair back.
     static std::vector<int16_t> swapped;
+    // Log only, nothing is changed. The game's sound code keeps a frame's length as
+    // a signed 16-bit count of 4-byte frames, so no real buffer has more than
+    // 0xFFFE samples. Run 4 crashed in the loop below; this line shows whether the
+    // cause was an impossible length (see NOTES.md, task 7i).
+    if (sample_count > 0xFFFE) {
+        fprintf(stderr, "[kigold][audio] IMPOSSIBLE LENGTH: queue_samples got %zu samples (0x%zX). The loop below will run off the end of RAM\n",
+            sample_count, sample_count);
+    }
     swapped.resize(sample_count);
     for (size_t i = 0; i + 1 < sample_count; i += 2) {
         swapped[i + 0] = audio_data[i + 1];

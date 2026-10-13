@@ -6,8 +6,9 @@
 //
 // What it prints:
 //   - the exception code and the thread it happened on
-//   - the code address, and the generated function it lies in if there is one
-//     (as the function's N64 address; look that up in syms/dump.toml for a name)
+//   - the code address, and the game function it lies in if there is one (as the
+//     function's N64 address; look that up in syms/dump.toml for a name). Other
+//     code prints as exe + offset; look that up in build-msvc/KIGoldRecompiled.map
 //   - for an access violation: the memory address, read or write, and what that
 //     address means to the game (N64 address, and which kind of address it is)
 //   - the chain of callers, each one resolved the same way
@@ -62,14 +63,34 @@ namespace {
         return section < 4 ? names[section] : "?";
     }
 
-    // Prints one code address: the generated function it lies in, or else the
-    // exe or DLL it belongs to.
+    // find_generated_function only knows where each function starts, so it returns
+    // the nearest start below the address, even when the address is in some other
+    // code that happens to sit after it in the exe (run 4: the runtime's
+    // run_thread_function was reported as a game function 0x556B3 bytes away).
+    // Windows knows the real start and end of the function an address is in (its
+    // unwind table). The match only counts if the game function starts inside it.
+    bool really_inside(uintptr_t lookup_address, const kigold::GeneratedFunc& func) {
+        uintptr_t func_start = lookup_address - func.host_offset;
+        DWORD64 image_base = 0;
+        PRUNTIME_FUNCTION entry = RtlLookupFunctionEntry(lookup_address, &image_base, nullptr);
+        if (entry == nullptr) {
+            // A tiny function without a stack frame has no entry. Accept only if close.
+            return func.host_offset < 0x100;
+        }
+        return func_start >= image_base + entry->BeginAddress;
+    }
+
+    // Prints one code address: the game function it lies in, or else the exe or
+    // DLL it belongs to. "Game function" means an entry of the generated section
+    // table. For a libultra function that the runtime replaces, that entry points
+    // at the runtime's own version, so the address is right but the code is not
+    // generated code.
     void print_code_address(const char* label, uintptr_t address, uintptr_t lookup_address) {
         kigold::GeneratedFunc func{};
-        if (kigold::find_generated_function(lookup_address, func)) {
-            fprintf(stderr, "[kigold][CRASH] %s 0x%016llX: generated function at N64 0x%08X (%s), 0x%X bytes into its PC code%s\n",
+        if (kigold::find_generated_function(lookup_address, func) && really_inside(lookup_address, func)) {
+            fprintf(stderr, "[kigold][CRASH] %s 0x%016llX: game function at N64 0x%08X (%s), 0x%X bytes into its PC code%s\n",
                 label, (unsigned long long)address, func.vram, section_name(func.section), func.host_offset,
-                func.shared ? " (several generated functions share this PC code, the N64 address may be another one)" : "");
+                func.shared ? " (several game functions share this PC code, the N64 address may be another one)" : "");
             return;
         }
         HMODULE module = nullptr;
@@ -83,7 +104,7 @@ namespace {
                     file = p + 1;
                 }
             }
-            fprintf(stderr, "[kigold][CRASH] %s 0x%016llX: not generated code, %s + 0x%llX\n",
+            fprintf(stderr, "[kigold][CRASH] %s 0x%016llX: not a game function, %s + 0x%llX\n",
                 label, (unsigned long long)address, file, (unsigned long long)(address - (uintptr_t)module));
         }
         else {
@@ -107,6 +128,8 @@ namespace {
         // The generated code reads N64 address A at rdram + (A - 0x80000000).
         uint64_t offset = address - rdram;
         uint32_t n64 = (uint32_t)(offset + 0x80000000ULL);
+        // The game's own RAM is 8 MB (what the runtime reports as osMemSize).
+        constexpr uint32_t CONSOLE_RAM = 8 * 1024 * 1024;
         const char* kind;
         if (offset < recomp::mem_size) {
             kind = "inside the game's RAM, which is readable and writable (unexpected for an access violation)";
@@ -120,14 +143,23 @@ namespace {
         else if (n64 < 0x80000000) {
             kind = "below 0x80000000: a TLB-mapped address or a bad pointer";
         }
+        else if (n64 >= 0xA0000000 && n64 < 0xA0000000 + CONSOLE_RAM) {
+            kind = "0xA0000000 to 0xA07FFFFF: on a console this is uncached RAM (KSEG1), the same memory as 0x80000000. The runtime does not mirror it";
+        }
         else if (n64 >= 0xA0000000 && n64 < 0xC0000000) {
-            kind = "0xA0000000 to 0xBFFFFFFF: direct hardware or cartridge access, which the runtime does not emulate";
+            kind = "0xA0800000 to 0xBFFFFFFF: direct hardware or cartridge access, which the runtime does not emulate";
         }
         else {
             kind = "past the end of the RAM the runtime provides (512 MB from 0x80000000): a bad pointer";
         }
         fprintf(stderr, "[kigold][CRASH] N64 address 0x%08X (the last 2 bits can differ, the runtime stores bytes swapped)\n", n64);
         fprintf(stderr, "[kigold][CRASH] that is %s\n", kind);
+        // The runtime's readable memory ends exactly at offset 512 MB, which is
+        // N64 address 0xA0000000. Code that walks forward through RAM and does
+        // not stop faults on the first page after it.
+        if (offset >= recomp::mem_size && offset < recomp::mem_size + 0x1000) {
+            fprintf(stderr, "[kigold][CRASH] NOTE: this is the very first page after the runtime's 512 MB of RAM. Check for a loop that ran off the end of RAM (a huge length) before believing the address\n");
+        }
     }
 
     void print_callers(const CONTEXT* crash_context) {
@@ -207,7 +239,7 @@ namespace {
             print_callers(info->ContextRecord);
         }
 
-        fprintf(stderr, "[kigold][CRASH] N64 addresses of generated functions: find the name in syms/dump.toml\n");
+        fprintf(stderr, "[kigold][CRASH] names: N64 address in syms/dump.toml (a libultra name means the runtime's own version ran); exe + offset in build-msvc/KIGoldRecompiled.map\n");
         fprintf(stderr, "[kigold][CRASH] ==================== END ====================\n");
         fflush(stderr);
         fflush(stdout);
