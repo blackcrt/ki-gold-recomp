@@ -2,6 +2,34 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Safe stand-in for `__osSiRawStartDma` (Phase 2, task 7d)
+
+**Result: `__osSiRawStartDma` now answers like a console with nothing plugged in and sends the "done" message, so no caller waits forever. Build passes. The exe was not run.** Decisions from 7c (BlackCRT): yes to the stand-in, and the `_game` suffix is fine.
+
+**What was read first**
+- `func_800341BC` builds the status request: one 8-byte record per port, `FF, 01, 03, command, FF, FF, FF, FF`, then `FE` as the end mark, and 1 in the last byte of the 64-byte block. That is the console's standard layout: padding byte, send length, receive length, then the data.
+- `func_80034294` unpacks the reply. For each port it takes the top two bits of the receive length byte as an error code (`(byte & 0xC0) >> 4`). If the code is not zero it stores it and skips the rest of that record. "No response" is bit 7 of that byte, which gives code 8. So the planned reply is exactly what the game understands.
+- `func_8003BF10` fills its buffer with `FF` bytes between sending the request and reading the reply. So the reply cannot be made from the buffer at read time.
+
+**The stand-in** (`src/game/missing_funcs.cpp`)
+- First argument 1 (send): copy the 64-byte block, walk its commands, set bit 7 on each receive length, clear the control byte. The receive bytes stay as they were, as on the console.
+- First argument 0 (read): write that kept block back into the game's buffer.
+- Both: call the runtime's `ultramodern::send_si_message()`, return 0, and print the loud `[kigold][MISSING] __osSiRawStartDma ...` line (now ending in `STAND-IN, answers as nothing plugged in`).
+- `__osSiGetAccess` and `__osSiRelAccess` are unchanged: log only.
+- One-off check outside the repo: the walker compiled on Linux and was fed the game's two layouts. Status request: all four ports get error code 8. Block read: only the receive length byte and the control byte change. A block of garbage does not run past the end.
+
+**What the game then does (static reading)**
+- `func_8003BF10` (block read): error code 8 is not the retry code 4, so it gives up at once and returns 8. No hang.
+- `func_80034020`: no port bit is set. At most 3 tries. No hang.
+- `func_800343F4` (status check): returns 1 (no pak) **or 2 (new pak)**. On "no response" the unpacker leaves the status byte unset, and this function tests that byte before the error code, so the result depends on leftover stack bytes. A real console with nothing plugged in has the same behavior. Both results are errors for the caller. No hang either way.
+
+**Stuck / unknown**
+- The static reading from 7c still says none of this is reached while no pak is reported. Only the first run can show it.
+- Open choice: answer status requests as "controller present, no pak" instead of "no response". That would make `func_800343F4` always return 1. It is a guess about a path that should never run, so it was not done.
+
+**Next**
+- Menu assets decision, then the first run with `KIGOLD_VERIFY_INFLATE` set.
+
 ## 2026-10-12: CRC functions translated from the game, serial-port callers checked (Phase 2, task 7c)
 
 **Result: the two CRC functions now run the game's own code. Regen and build pass. The exe was not run.** The three serial-port stand-ins are unchanged (log only); what to do with them is an open decision. The TLB functions were not touched.
