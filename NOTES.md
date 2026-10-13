@@ -2,6 +2,64 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Inflate hooks, and the ROM question settled (Phase 2, tasks 7a and 7b)
+
+**Result: the hooks are in, regen and build pass. The exe was not run.** Nothing here is proven until the first run shows the log lines (ground rule 1).
+
+**How the runtime learns a section is loaded (read from `lib/N64ModernRuntime/librecomp/src/overlays.cpp`)**
+- It keeps a table from RAM address to C function. A lookup that misses prints `Failed to find function at 0x...` and exits.
+- `load_overlays(rom, ram, size)` fills the table from our generated section table. It never reads the ROM; the ROM offset is only the ID of a section.
+- At start the runtime does this once for ROM `0x1000`, 1 MB. That covers the boot section only.
+- `unload_overlays(ram, size)` removes sections. A range that covers only part of a loaded section prints `Cannot partially unload section` and exits.
+- In our generated code the jump from boot into stream 1 (`0x800005D4`) is a table lookup, so without a hook the game dies there. The jumps into `stream2_entry` and `stream3_entry` are direct C calls and need no table; function pointers and thread starts inside the streams do.
+
+**The ROM question: no decompressed ROM at run time**
+- The recompiled boot code reads the compressed streams from the user's original ROM with `osPiStartDma` and runs the game's own inflate into RAM. The original 12 MB is unchanged in our layout, so every ROM read is right on the original ROM.
+- So the hash in `main.cpp` was already correct. `tools/unpack_rom.py` stays a developer tool for regeneration. Users never run it.
+- The runtime's `decompression_routine` field is only used for mods (`mods.cpp`). Deferred (decision 2026-10-12).
+
+**The hooks** (`[[patches.hook]]` in `kigold.toml`, code in `src/game/inflate_hooks.cpp`)
+
+| Hook | Where | What it does |
+| --- | --- | --- |
+| `kigold_on_rom_read` | start of `boot_rom_read` (`0x80000740`) and `func_800007B4` | remembers which ROM offset each buffer was last filled from |
+| `kigold_on_inflate_start` | start of `boot_inflate` (`0x80000900`) | identifies the stream, loads its functions, logs one line per inflate |
+| `kigold_on_inflate_end` | before the `jr ra` at `0x80000950` | developer check only |
+
+- A stream counts only when both ends agree: the destination address, and the ROM offset of the source buffer compared with entries 0, 1, 2 of the game's own stream table in RAM (`0x800071E0`). No ROM offsets are written in our code.
+- A half match (right destination with the wrong source, or the reverse) prints a `WARNING` line and loads and unloads nothing.
+- A remembered ROM read is used up by one inflate. A second inflate from the same buffer without a new read counts as unknown source.
+- Before stream 2 or 3 is loaded, the whole shared range (`0x801ACB20`, size `0xE8B40`) is unloaded. Stream 3's image lies fully inside stream 2's.
+- Why one hook on the helper and not three at the call sites: `boot_inflate` has 19 call sites and only 3 are understood. A reload from one of the other 16 would be missed.
+- **Developer check, off by default:** set the environment variable `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64`. Each code stream is then compared with that file right after the game inflates it (`VERIFY: stream1 OK` or `WRONG` with the first bad address). The file stays local, as always.
+
+**Load order evidence (static only)**
+- In `stream1_main` the stream 2 load (`0x8000FB14`) comes first, `stream2_entry` runs and returns, and the path to the stream 3 inflate (`0x8000FC90`) has only forward skips.
+- No function in stream 2 calls stream 3 directly, or the reverse.
+- Open hint: the EEPROM save and load functions are in stream 2 at `0x801CD2C4`, inside the area stream 3 overwrites. Either saves only happen during start-up or stream 2 is reloaded later. The inflate log will show it (decision 2026-10-12: no static trace now).
+
+**Regen and build**
+- `python3 tools/regen.py`: exit 0, the four hook lines are in `RecompiledFuncs/funcs_0.c`.
+- `tools/build.ps1 -Build`: exit 0, `KIGoldRecompiled.exe` linked. No warnings in our files; 233 in `lib/` as before.
+
+**What to look for at the first run**
+
+| Log line | Meaning |
+| --- | --- |
+| `[kigold][inflate] dst=0x8000F960 ... stream1 loaded`, then stream2, then stream3 | Good. A later `stream2 loaded` means stream 2 is reloaded |
+| `[kigold][inflate] WARNING ...` | An inflate that half matches a code stream. Nothing was loaded; needs a look |
+| `Failed to find function at 0x8000F960` | The stream 1 hook did not match |
+| `Failed to find function at 0x801.....` | A pointer into an unloaded stream, or a function start missing from the symbol file |
+| `Cannot partially unload section` | A bug in our unload range |
+| `VERIFY: ... WRONG` | The recompiled inflate produces wrong bytes |
+
+**Stuck / unknown**
+- A direct C call into a stream that is not loaded gives no error. The inflate log is the only view of the order.
+- Everything in the 6c entry still stands: TLB is log only, 5 libultra bodies are log only, the menu assets are missing.
+
+**Next**
+- Menu assets decision, then the first run, with `KIGOLD_VERIFY_INFLATE` set.
+
 ## 2026-10-10: main.cpp, stand-in bodies, first compile and link (Phase 2, task 6c)
 
 **Result: it compiles and links. `build-msvc/KIGoldRecompiled.exe` exists (12.1 MB). The exe was not run; the first run is task 7 and needs the inflate hooks first.** Linking only proves every name has a body. It says nothing about whether the game works (ground rule 1).

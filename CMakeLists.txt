@@ -128,6 +128,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
     ${CMAKE_SOURCE_DIR}/src/game/tlb.cpp
     ${CMAKE_SOURCE_DIR}/src/game/missing_funcs.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/inflate_hooks.cpp
     ${AUDIO_UCODE_SOURCE}
 )
 target_sources(KIGoldRecompiled PRIVATE ${SOURCES})

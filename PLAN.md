@@ -1,7 +1,7 @@
 # KI Gold Recomp: Project Plan
 
 **Status:** Phase 2 (First boot) in progress, started 2026-10-10. Phase 1 done (2026-10-10).
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-12
 
 ## Goal
 
@@ -108,7 +108,7 @@ This is the suggested order from the go/no-go. It can change as the build teache
 - [x] Fall-through cleanup script and its test. First, because it is the one silent problem. Done 2026-10-10: `tools/fix_fallthroughs.py`, step 5 of `tools/regen.py`, 239 fixed (235 after task 4b). It also found a second silent problem: 3 functions lost a delay slot instruction. Fixed in the tracer the same day (task 4b, see the risks table)
 - [x] RSPRecomp config for the audio microcode. Done 2026-10-10: `rsp/kigold_audio.toml`, step 6 of `tools/regen.py`, clean run (73,112 bytes of C++). Address `0x04001080` and size `0xE20` confirmed from the code. Sound is not proven until the game runs
 - [x] Project skeleton from the WM2K template, then first compile and link. Fix what the linker reports. Done 2026-10-10 (tasks 6b and 6c): submodules, `COPYING`, `CMakeLists.txt`, `tools/build.ps1`, then `src/main/main.cpp` and the stand-in bodies. `KIGoldRecompiled.exe` links; a full build takes about 2 minutes. The linker asked for 7 names the runtime does not have: the 2 TLB functions and 5 controller-port internals, all log-only for now (see `NOTES.md`, task 6c). Not run yet
-- [ ] Hook the 3 inflate sites so the runtime sees streams 1 to 3 load (and swap streams 2 and 3)
+- [x] Hook the inflate helper so the runtime sees streams 1 to 3 load (and swap streams 2 and 3). One hook on `boot_inflate` plus the ROM read helpers, in `src/game/inflate_hooks.cpp`. Built, not yet proven by a run
 - [ ] Menu assets and controller database next to the exe. Needed for the first run. **Decide at the first run (decision 2026-10-10).** Lean: commit the text files (`recomp.rcss`, the icons, the controller database) if their licenses allow, and download the fonts at configure time
 - [ ] First run. Chase crashes one at a time. Check the cross-function loops here
 - [ ] The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked
@@ -208,5 +208,7 @@ The runtime libraries in `lib/` are git submodules: our repo stores only a point
 | 2026-10-10 | RecompFrontend is used as a submodule only; its files are never copied into our repo. Its license is the first item on the "before going public" checklist |
 | 2026-10-10 | Fonts and the controller database are not committed; the build copies them in. The plan was to copy them from the submodules, but the submodules do not contain them, so the source is still open |
 | 2026-10-10 | Launcher assets: decide at the first run. Lean: commit the text files if their licenses allow, download the fonts at configure time |
+| 2026-10-12 | The port runs from the user's original ROM. No decompressed ROM at run time: the game inflates its own code, and the hooks only tell the runtime which functions are loaded. `tools/unpack_rom.py` stays a developer tool for regeneration. Mod support (which would need a decompression routine in C++) is deferred |
+| 2026-10-12 | Inflate hooks: one hook on the inflate helper instead of three at the call sites, and a stream only counts when the destination and the ROM source both match |
 | 2026-10-10 | Submodule pins: keep as they are (upstream URLs). Forking the 3 libraries under BlackCRT with a branch at each pin is on the before-going-public list |
 | 2026-10-10 | Save type: 4K EEPROM (`recomp::SaveType::Eep4k`). The game reads and writes exactly 0x200 bytes at EEPROM address 0. It also has Controller Pak code (game code `NKIE`), which the runtime cannot emulate yet (see `NOTES.md`, task 6c) |

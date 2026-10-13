@@ -55,3 +55,28 @@ stubs = [
     "func_80005D98",    # unnamed (lead: send_packet); writes a packet, waits on Cause
     "func_80005E58",    # unnamed (lead: send); calls func_80005D98 3 bytes at a time
 ]
+
+# A hook adds one line of C to a generated function. N64Recomp writes it on every
+# regeneration, at the start of the function or before the instruction at
+# before_vram. These four call our code in src/game/inflate_hooks.cpp, which tells
+# the runtime when the game has inflated one of its three code streams.
+
+# Remember which ROM offset each buffer was filled from (both ROM read helpers).
+[[patches.hook]]
+func = "boot_rom_read"
+text = "{ extern void kigold_on_rom_read(uint8_t* rdram, recomp_context* ctx); kigold_on_rom_read(rdram, ctx); }"
+
+[[patches.hook]]
+func = "func_800007B4"
+text = "{ extern void kigold_on_rom_read(uint8_t* rdram, recomp_context* ctx); kigold_on_rom_read(rdram, ctx); }"
+
+# Start of the inflate helper: identify the stream and load its functions.
+[[patches.hook]]
+func = "boot_inflate"
+text = "{ extern void kigold_on_inflate_start(uint8_t* rdram, recomp_context* ctx); kigold_on_inflate_start(rdram, ctx); }"
+
+# Just before the inflate helper returns (its jr ra): the developer-only check.
+[[patches.hook]]
+func = "boot_inflate"
+before_vram = 0x80000950
+text = "{ extern void kigold_on_inflate_end(uint8_t* rdram, recomp_context* ctx); kigold_on_inflate_end(rdram, ctx); }"

@@ -197,9 +197,9 @@ int main(int argc, char** argv) {
     // ---- The game ----
     recomp::GameEntry game{};
     // XXH3 64-bit hash of the original US V1.2 ROM in .z64 byte order (12 MB).
-    // OPEN (task 7): the recompiled code is laid out for the decompressed ROM that
-    // tools/unpack_rom.py builds, which is bigger and has a different hash. How the
-    // runtime gets from the user's ROM to that layout is decided with the inflate hooks.
+    // The user's original ROM is all the game needs: the recompiled boot code inflates
+    // the code streams from it, and src/game/inflate_hooks.cpp tells the runtime when.
+    // The decompressed ROM of tools/unpack_rom.py is only an input for N64Recomp.
     game.rom_hash = 0x2952FB28B16AB571ULL;
     game.internal_name = "Killer Instinct Gold";
     game.display_name = "Killer Instinct Gold";
