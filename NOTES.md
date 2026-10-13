@@ -2,6 +2,47 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-12: Third run crash, crash reporter added (Phase 2, task 7h)
+
+**Result: the 7g fixes worked (both streams VERIFY OK, both entered). The third run then died silently with 0xC0000005 after the first data inflate. A crash reporter is added so the next run says where and why. Build passes. The exe was not run**, so the reporter itself is unproven until run 4 (ground rule 1). Nothing in the game path was changed.
+
+**The third run** (BlackCRT, `build-msvc/firstrun.log`): stream1 loaded, VERIFY OK, entered; stream2 loaded, VERIFY OK, entered; `dst=0x802DEF10 rom=0x00A6AA60: data`; exit code -1073741819. No `osMapTLB` line.
+
+**1. The crash reporter** (`src/main/crash_reporter.cpp`, new)
+- A Windows vectored exception handler, installed at the top of `main`. Prints `[kigold][CRASH]` lines for access violations and the other fatal CPU exceptions, then flushes.
+- It prints: exception code and name, thread id and thread name, the code address, READ / WRITE / EXECUTE and the memory address, and the chain of callers (up to 32).
+- Code addresses: each one is looked up in the generated section table. A hit prints the function's N64 address and section, for example `generated function at N64 0x801AEE60 (stream2)`. The name is found by that address in `syms/dump.toml` (default names are `func_<address>` anyway). The exe has no table of names in a Release build, so the reporter cannot print the name itself. Code that is not generated prints as `KIGoldRecompiled.exe + offset` (or the DLL name).
+- Memory address: if it lies in the 4 GB block the runtime reserves for the game, it is turned back into the N64 address and classified: null pointer, the per-fighter TLB range 0x00010000 to 0x000BA000, other address below 0x80000000, hardware or cartridge (0xA0000000 to 0xBFFFFFFF), or past the 512 MB of RAM.
+- It only reports. It returns "continue search", so Windows ends the program as before with the same exit code. At most 3 reports per run, in case a library raises and handles such an exception itself.
+- Support code: `kigold::find_generated_function` in `register_overlays.cpp` (sorted list of every generated function's place in the exe, built at start), `kigold::note_rdram` called from the ROM read hook and the renderer callback so the reporter knows where game memory starts.
+- Limits: Windows x64 only. If the linker merged identical functions, the N64 address can be one of several, and the line says so.
+
+**2. Likeliest causes of this crash (static reading only, nothing proven)**
+
+Facts first:
+- The data inflate is called from `func_801AEE60_stream2` (the `jal` at 0x801AEF10), the third call inside `stream2_entry`. It reads ROM 0xA6AA60 to 0xA73970 (0x8F10 bytes) to 0x802D4000, uses a work buffer at 0x802DCF10, and inflates to 0x802DEF10. All three are inside normal RAM.
+- Right after, the same function calls `func_8002FE7C` (stream1) 96 times and `memcpy_boot` 9 times on the inflated data. `func_8002FE7C` calls the decoders `func_8002FA20` and `func_8002FC40`. Then `stream2_entry` goes on to `func_801BCB30_stream2` and `func_800129A0`.
+- The log shows where the inflate started, not that it ended, and nothing after it. So the crash is anywhere from inside that inflate onward, on any thread.
+
+Candidates, likeliest first:
+1. **A bad pointer in game code after the inflate** (the 96 decoder calls, or later in `stream2_entry`). The decoders walk pointer tables. A wrong translation or a wrong assumption of ours would show here. Report would say: generated function, N64 address of the memory.
+2. **A crash inside the runtime or renderer, caused by what the game hands it** (first video, sound or thread setup; `stream2_entry` sets up a 320x240 screen in `func_801AE794_stream2` just before). The exit code does not say which thread died. Report would say: `not generated code`, with generated functions in the caller chain, or a thread named VI, Gfx or SP Task.
+3. **The data inflate itself.** Unlikely: the same code just inflated 0x123000 bytes of streams 1 and 2 correctly. But VERIFY only checks code streams, so this data block is unchecked. Report would say: N64 0x80000960 to 0x80001DF0 (boot).
+4. **A TLB address.** Unlikely at this point: no `osMapTLB` line was printed, and reading a TLB address before mapping it would crash a real console too. Expected later, not here. Report would say: memory address in the per-fighter TLB range.
+
+Ruled out on paper:
+- Direct hardware access in game code: none. The 0xA.../0xB... constants in game functions are display list commands and floats. Only libultra touches hardware, and the runtime replaces it.
+- Direct TLB or COP0 instructions in game code: none besides libultra (`stream3_entry` has two, not reached yet).
+- A stubbed function: the only stream1 stub, `func_80030EF0`, is called only from `func_8001DE9C`, not from this path.
+- A jump to an unknown function or a bad jump table: those print "Failed to find function" (seen in run 1), they do not end in an access violation.
+
+**Commands**
+- Build: `Build OK`, no warnings from our files.
+
+**Next**
+- Run 4 with the same settings. Paste the `[kigold][CRASH]` block.
+- Suggestion, not done: if the crash is in non-generated code, add a linker map file (one flag, output stays in `build-msvc/`) so `KIGoldRecompiled.exe + offset` can be turned into a function name.
+
 ## 2026-10-12: Second run, the VERIFY check was wrong and caused the crash (Phase 2, task 7g)
 
 **Result: the 0x80000450 fix worked. The second run's "stream1 WRONG" and the silent exit (0xC0000005) both came from a bug in our own VERIFY check, not from the game's inflate. Fixed. Regen and build pass. The exe was not run again**, so whether the inflate is right is still unproven (ground rule 1).

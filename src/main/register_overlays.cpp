@@ -10,7 +10,63 @@
 
 #include "librecomp/overlays.hpp"
 
+#include <algorithm>
+#include <vector>
+
+namespace {
+    // Every generated function, sorted by where its compiled code sits in the exe.
+    // Built once at start so the crash reporter can search it without allocating.
+    struct HostFunc {
+        uintptr_t host;
+        uint32_t vram;
+        uint32_t section;
+    };
+    std::vector<HostFunc> host_funcs;
+
+    // A PC address further than this past the last generated function is not
+    // counted as part of it.
+    constexpr uintptr_t LAST_FUNC_MAX_SIZE = 0x10000;
+
+    void build_host_funcs() {
+        host_funcs.clear();
+        for (size_t s = 0; s < ARRLEN(section_table); s++) {
+            const SectionTableEntry& section = section_table[s];
+            for (size_t f = 0; f < section.num_funcs; f++) {
+                host_funcs.push_back({ (uintptr_t)section.funcs[f].func,
+                    section.ram_addr + section.funcs[f].offset, (uint32_t)section.index });
+            }
+        }
+        std::stable_sort(host_funcs.begin(), host_funcs.end(),
+            [](const HostFunc& a, const HostFunc& b) { return a.host < b.host; });
+    }
+}
+
+bool kigold::find_generated_function(uintptr_t host_address, GeneratedFunc& out) {
+    // The first function that starts after the address; the one before it is ours.
+    auto next = std::upper_bound(host_funcs.begin(), host_funcs.end(), host_address,
+        [](uintptr_t address, const HostFunc& func) { return address < func.host; });
+    if (next == host_funcs.begin()) {
+        return false;
+    }
+    if (next == host_funcs.end() && host_address - host_funcs.back().host >= LAST_FUNC_MAX_SIZE) {
+        return false;
+    }
+    auto found = next - 1;
+    // Functions with identical code can be merged by the linker. Report the first.
+    auto first = found;
+    while (first != host_funcs.begin() && (first - 1)->host == found->host) {
+        first--;
+    }
+    out.vram = first->vram;
+    out.section = first->section;
+    out.host_offset = (uint32_t)(host_address - first->host);
+    out.shared = (first != found);
+    return true;
+}
+
 void kigold::register_overlays() {
+    build_host_funcs();
+
     recomp::overlays::overlay_section_table_data_t sections {
         .code_sections = section_table,
         .num_code_sections = ARRLEN(section_table),

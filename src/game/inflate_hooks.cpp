@@ -29,6 +29,8 @@
 #include "recomp.h"
 #include "librecomp/overlays.hpp"
 
+#include "kigold_decls.h"
+
 namespace {
     // The game's stream table, copied to RAM with the boot code (ROM 0x7DE0).
     // Pairs of ROM offsets (start, end). Entries 0, 1, 2 are the code streams.
@@ -140,7 +142,8 @@ namespace {
 
 // Arguments of both ROM read helpers: a0 = ROM offset, a1 = buffer, a2 = length.
 extern "C" void kigold_on_rom_read(uint8_t* rdram, recomp_context* ctx) {
-    (void)rdram;
+    // The earliest point where our code sees the game's memory: tell the crash reporter.
+    kigold::note_rdram(rdram);
     std::lock_guard lock{ state_mutex };
     last_rom_read[(uint32_t)ctx->r5] = (uint32_t)ctx->r4;
 }

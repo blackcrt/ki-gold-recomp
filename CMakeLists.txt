@@ -126,6 +126,7 @@ add_executable(KIGoldRecompiled)
 set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/main/main.cpp
     ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/crash_reporter.cpp
     ${CMAKE_SOURCE_DIR}/src/game/tlb.cpp
     ${CMAKE_SOURCE_DIR}/src/game/missing_funcs.cpp
     ${CMAKE_SOURCE_DIR}/src/game/inflate_hooks.cpp

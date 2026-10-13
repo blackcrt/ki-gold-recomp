@@ -177,6 +177,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[kigold] main start\n");
+    kigold::install_crash_reporter();
 
 #ifdef _WIN32
     // The runtime times video frames with Sleep(). Windows only makes Sleep() precise
@@ -244,6 +245,7 @@ int main(int argc, char** argv) {
     ultramodern::renderer::callbacks_t renderer_callbacks{
         .create_render_context = [](uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode)
             -> std::unique_ptr<ultramodern::renderer::RendererContext> {
+            kigold::note_rdram(rdram);
             return recompui::renderer::create_render_context(rdram, window_handle,
                 ultramodern::renderer::PresentationMode::Console, developer_mode);
         },

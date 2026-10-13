@@ -79,7 +79,8 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `CMakeLists.txt` | Build file for the Windows port (adapted from WM2K) |
 | `tools/build.ps1` | Loads the x64 clang-cl environment and runs CMake. From Ubuntu: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1'` (add `-Build` to compile). Output in `build-msvc/`, never committed |
 | `src/main/main.cpp` | Program start: describes the game to the runtime, sets up window, sound, input, then starts it |
-| `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime |
+| `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime. Also finds the generated function for a PC code address (for the crash reporter) |
+| `src/main/crash_reporter.cpp` | Prints `[kigold][CRASH]` lines on a fatal exception: code address, memory address as an N64 address, read or write, callers. Report only, the exit code stays the same |
 | `src/game/tlb.cpp` | `osMapTLB` and `osUnmapTLB` for the runtime. Log only for now |
 | `src/game/missing_funcs.cpp` | Loud stand-ins for the 3 serial-port libultra names the runtime does not provide. Two only log; `__osSiRawStartDma` answers as "nothing plugged in" |
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3, and logs when the game enters each stream. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |

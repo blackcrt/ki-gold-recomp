@@ -17,6 +17,22 @@ namespace kigold {
     // Tells the runtime where each block of recompiled code lives in the ROM and in
     // RAM. In src/main/register_overlays.cpp.
     void register_overlays();
+
+    // A generated function, found from an address in its compiled PC code.
+    struct GeneratedFunc {
+        uint32_t vram;        // the function's N64 address
+        uint32_t section;     // its section in the generated section table
+        uint32_t host_offset; // how far the PC address is past the function's start
+        bool shared;          // the linker merged several generated functions into this code
+    };
+    // Finds the generated function a PC code address lies in. False if it is not
+    // in generated code. In src/main/register_overlays.cpp.
+    bool find_generated_function(uintptr_t host_address, GeneratedFunc& out);
+
+    // Crash reporter, in src/main/crash_reporter.cpp. note_rdram tells it where the
+    // game's memory is, so it can turn a PC memory address into an N64 address.
+    void install_crash_reporter();
+    void note_rdram(uint8_t* rdram);
 }
 
 #endif
