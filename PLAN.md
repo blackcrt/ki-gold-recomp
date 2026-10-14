@@ -87,7 +87,7 @@ The gate was: the microcode is supported by RT64, and the symbol file covers the
 | Risk | What we know | Plan |
 | --- | --- | --- |
 | Nothing compiled or run | "Translates" only means N64Recomp produced C | Get to a first compile and link early, before polishing anything |
-| 9 stubs | `func_80030EF0` in stream1 (branches into the middle of the next function), and 8 in stream3: 5 hand-made jump tables, 2 that read the Count register, 1 with a stack offset N64Recomp rejects | A stub is an empty function. Fix each when the game reaches it |
+| 8 stubs (was 9) | `func_80030EF0` in stream1 (branches into the middle of the next function), and 7 in stream3: 5 hand-made jump tables, 2 that read the Count register. The 8th in stream3, the frame tail with a stack offset N64Recomp rejects, is translated since 2026-10-13 (task 7t, two instruction patches in `kigold.toml`) | A stub is an empty function. Fix each when the game reaches it. A fight frame reaches all 7 in stream3 (table in `NOTES.md`, task 7t) |
 | stream3 fall-throughs | 243 functions run off their end into the next one. N64Recomp makes the C function simply return, with no warning. Silent miscompile | Cleanup script that chains each one into the next function, with a known-answer test. **Done 2026-10-10:** `tools/fix_fallthroughs.py` fixes 235 on every regeneration (239 before the task 4b split fix) |
 | stream3 cross-function loops | 169 functions in 14 loop groups (largest 95). Each loop becomes a call then `return`, so a loop turns into recursion | Check whether clang-cl makes these real jumps. If not, the stack grows and it needs a cleanup step |
 | 86 mid-function table addresses | Three inline tables point into the middle of functions. They sit beside the 5 jump-table stubs | Decide together with those 5 stubs: the fix for the dispatch decides whether the 86 become function starts |
@@ -111,7 +111,7 @@ This is the suggested order from the go/no-go. It can change as the build teache
 - [x] Hook the inflate helper so the runtime sees streams 1 to 3 load (and swap streams 2 and 3). One hook on `boot_inflate` plus the ROM read helpers, in `src/game/inflate_hooks.cpp`. Built, not yet proven by a run
 - [x] Menu assets and controller database next to the exe. Done 2026-10-12 (task 7e): our own `recomp.rcss`, 11 icons and the controller database are committed (`menu/`, `recompcontrollerdb.txt`), the 3 fonts are downloaded at configure time, pinned and hash checked. Sources and licenses in `docs/ASSETS.md`. Not run yet
 - [x] First run. Chase crashes one at a time. Check the cross-function loops here. Done 2026-10-13 (runs 8 and 9): the game boots to the title screen and menus, with sound. Crashes past the menus are chased in later tasks. The cross-function loops were not checked yet
-- [ ] The 8 stream3 stubs and the 86 table addresses, when the game reaches them. This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked
+- [ ] The 8 stream3 stubs and the 86 table addresses, when the game reaches them. **1 of 8 done** (2026-10-13, task 7t): the frame tail is translated, not yet proven by a run. Its abort paths are still wrong and only logged (`src/game/frame_tail.cpp`). Fight frames reach the other 7 (see `NOTES.md`, task 7t). This may come sooner than its place in the list: stream1 calls into stream3 at `0x8000FEF0`, near the start of stream1, which hints that stream3 runs early. Not checked
 
 ## AI workflow
 

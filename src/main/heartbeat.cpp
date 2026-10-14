@@ -351,14 +351,18 @@ namespace {
                 std::lock_guard lock{ s.threads_mutex };
                 threads = s.threads;
             }
+            kigold::FrameCounts frame = kigold::frame_counts();
             fprintf(stderr,
-                "[kigold][beat] ---- %lld s: video ticks %llu, DP blocks %llu, graphics tasks %llu, audio tasks %llu, inflates %llu, game threads %zu ----\n",
+                "[kigold][beat] ---- %lld s: video ticks %llu, DP blocks %llu, graphics tasks %llu, audio tasks %llu, inflates %llu, stream3 frames %llu (abort jumps %llu, wrong tail reruns %llu), game threads %zu ----\n",
                 seconds,
                 (unsigned long long)s.video_ticks.load(std::memory_order_relaxed),
                 (unsigned long long)s.dp_blocks.load(std::memory_order_relaxed),
                 (unsigned long long)s.graphics_tasks.load(std::memory_order_relaxed),
                 (unsigned long long)s.audio_tasks.load(std::memory_order_relaxed),
                 (unsigned long long)s.inflates.load(std::memory_order_relaxed),
+                (unsigned long long)frame.frames,
+                (unsigned long long)frame.abort_jumps,
+                (unsigned long long)frame.tail_reruns,
                 threads.size());
             for (const KnownThread& known : threads) {
                 print_thread(rdram, known);
@@ -432,7 +436,7 @@ void kigold::start_heartbeat() {
     }
     state().on.store(true);
     fprintf(stderr, "[kigold][beat] heartbeat on, one beat every %lld seconds\n", (long long)BEAT_INTERVAL.count());
-    fprintf(stderr, "[kigold][beat] counters: video ticks = video frames of the runtime since the game started, each one sends the game a video interrupt message; DP blocks = blocks of raw drawing commands the game passed to osDpSetNextBuffer (not drawn yet); graphics tasks = display lists handed to the renderer; audio tasks = sound tasks run; inflates = calls of the game's inflate helper\n");
+    fprintf(stderr, "[kigold][beat] counters: video ticks = video frames of the runtime since the game started, each one sends the game a video interrupt message; DP blocks = blocks of raw drawing commands the game passed to osDpSetNextBuffer (not drawn yet); graphics tasks = display lists handed to the renderer; audio tasks = sound tasks run; inflates = calls of the game's inflate helper; stream3 frames = calls of the fight code's frame entry at 0x801AE460; abort jumps = jumps straight into its tail at 0x801AE6B4; wrong tail reruns = the tail ran again in the same frame, which our build gets wrong (see [kigold][frame] lines)\n");
     fprintf(stderr, "[kigold][beat] stack: A < B means A was called from B. An address is a game function (N64 address, look it up in syms/dump.toml; a libultra name there means the runtime's own version ran). A ? means several game functions share that PC code\n");
 #ifndef KIGOLD_CAN_WALK_STACKS
     fprintf(stderr, "[kigold][beat] stacks are Windows x64 only, lines will have no stack part\n");

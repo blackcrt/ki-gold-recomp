@@ -2,6 +2,57 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Frame tail translated, abort jumps logged, the other stubs listed (Phase 2, task 7t)
+
+**Result: the frame tail `func_801AE6B4_stream3` is no longer a stub. N64Recomp accepted the two instruction patches on the first try. Regenerated once, builds and links. The exe was not run**, so nothing here is proven until run 12 (ground rule 1).
+
+**Decision (BlackCRT and the coach, after 7s):** option 1 now, option 2 (the real non-local exit) later as its own design task.
+
+**1. The tail**
+- `kigold.toml`: the tail is off the stub list. Two `[[patches.instruction]]` entries use `$at` instead of `$sp` as the scratch register: `0x801AE6B4` becomes `lui $at, 0x801E` (`0x3C01801E`), `0x801AE6B8` becomes `lw $sp, -0x6008($at)` (`0x8C3D9FF8`). `$at` is reloaded from the stack at `0x801AE704`.
+- Checked in the generated code (`RecompiledFuncs/funcs_14.c`): the tail has a full body, starts with the patched pair, restores the 16 float and all integer registers, and ends with the status write, the return value from `0x801D8876` and `return`. The frame entry still falls into it through `tools/fix_fallthroughs.py`.
+- The status write at `0x801AE794` should be harmless: the tail writes back what it read, with the saved "interrupts on" bit put back, and that bit is 0 on our runtime. Read from the runtime source, not proven by a run.
+- Report: 30 files, 1325 function bodies, N64Recomp and RSPRecomp exit 0.
+
+**2. The log (`src/game/frame_tail.cpp`, new)**
+- There are **three** jumps into the tail, not two as 7s said: `0x801BDA40` (in `func_801BD9EC_stream3`), `0x801BDC28` (in `func_801BDA58_stream3`) and `0x801BDC34` (in `func_801BDC30_stream3`).
+- Five `[[patches.hook]]` entries: start of the entry, start of the tail, and one before each jump.
+- `[kigold][frame] ABORT JUMP: 0x... jumps into the frame tail (frame N, abort jump N)`: every jump. A jump alone is not wrong: the entry itself jumps to `func_801BDC30_stream3` at `0x801AE560`, and that returns correctly in our build.
+- `[kigold][frame] WRONG: the frame tail runs for the 2nd time in frame N`: the proof that an abort came from inside a called routine and our code went on with the frame.
+- 8 lines of each kind, then one "hidden" line. The heartbeat line has three new counters: `stream3 frames`, `abort jumps`, `wrong tail reruns`.
+- Limit: if the wrongly continued frame crashes before the second tail, only the ABORT JUMP line is there. It is printed before the jump, so it will be the last `[kigold][frame]` line in the log.
+- If a second tail restores garbage, its status write may hit the runtime's `exit()` ("Unhandled status register bits changed"). The WRONG line prints before that.
+- Many routines the entry calls with `jal` branch to the abort routines (`0x801AE858`, `0x801AE88C`, `0x801AF574`, `0x801B0034`, `0x801B003C`, `0x801C27AC`, `0x801C29A0`), so the wrong case is reachable. `func_801BDA58_stream3` always ends in the tail. It writes `0x5A` (90) to `0x801D8894`, which the entry counts down on the next frames, and `func_801BD9EC_stream3` writes the `0x3972` value the entry tests at `0x801AE67C`. This looks like the end of a round or fight. Not proven.
+
+**3. The other stubs**
+`kigold.toml` has 11 stubs now: 7 in stream3, `func_80030EF0` in stream1, and the 3 debug link functions (stubbed by choice). The frame entry can reach all 7 stream3 stubs (worked out from the split with a throwaway call graph script, static only, nothing run).
+
+| Stub | What it is | Does a fight frame reach it |
+| --- | --- | --- |
+| `func_801AFD44_stream3`, table `0x801C52A4` (76 entries) | The object loop. Walks 40 slots of `0x100` bytes from `0x801D34C0`, and jumps through the table on each slot's first byte (0 = skip). Slots 0 and 1 look like the two fighters | **Yes, every normal frame.** `func_801AFC94_stream3` (called at `0x801AE578`) falls into it. Today no object runs its per-frame code |
+| `func_801AFE98_stream3`, table `0x801B5B64` (17 entries) | A second loop right after the first: 200 entries of `0x1C` bytes from `0x801D5DE8`, table jump on the first byte | **Yes, every normal frame**, once the first loop is done. Sits behind the first stub |
+| `func_801BCC84_stream3`, table `0x801C4604` (168 entries) | Part of `func_801BCA80_stream3`, which reads byte pairs from the pointer at `0x20` of an object. First byte 0 means "command", the second byte picks the handler. A command script reader | **Very likely every frame**: 16 routines call `func_801BCA80_stream3`. Most of them sit behind the first stub |
+| `func_801C0B5C_stream3`, table `0x801C0E3C` (in the code, up to the next table, about 51 entries) | Part of `func_801C0150_stream3`, another script reader (state at `$k1`, at most 69 steps a call) | **Yes, for a fighter slot whose byte 3 is not 0** (`0x801D34C3`, `0x801D35C3`). `func_801AF240_stream3`, the first call of every normal frame, tests that. What byte 3 means is not known |
+| `func_801C0BB4_stream3`, table `0x801C0F08` (52 entries) | Same routine, the other dispatch (taken when byte 5 of the state is not 0) | Same as above |
+| `func_801B6578_stream3` (Count) | The random number routine: seed at `0x801D88A8`, shifts and XORs, mixes in the Count register, result in `$a2` | **Yes.** 72 call sites in 32 routines, one in `func_801C22B0_stream3`, which runs at the end of every frame. Today `$a2` keeps the caller's old value and the seed never changes |
+| `func_801B8F00_stream3` (Count) | A `0x504` byte piece of the big per-fighter chain that starts at `func_801B6F98_stream3` (called at `0x801AE694`). Its one Count read at `0x801B925C` only makes a small random number from the low 5 bits for `func_801BA800_stream3` | **Yes, when byte `0xF4` of the object is not 0** (`0x801B85E4`), and from `func_801B8DEC_stream3`. Today the whole piece is lost, not only the Count read |
+
+Not stream3: `func_80030EF0` (stream1, branches into another function) was not looked at in this task.
+
+**Ideas for the plan (not tried)**
+- The 2 Count routines: the same trick as the tail. Patch each `mfc0 ..., $9` to a `nop` and put a hook in front that sets the register from the runtime's counter. Small, one regeneration. The random number routine has the most callers, so this is the cheapest big win.
+- The 5 jump tables: N64Recomp at our pin has no config option for a table size (`config.cpp` only has `manual_funcs`). This needs its own design task, together with the 86 mid-function table addresses in `PLAN.md`. Until then the fight has no object logic at all.
+
+**Side effect found**
+- `func_801AFC94_stream3` lowers `sp` by 8 and then falls into the stubbed loop, so it returns with `sp` still 8 too low. Harmless now, because the tail resets `sp` every frame. Where the game raises it again was not checked.
+
+**Open**
+- Abort paths are still wrong (option 2, design task).
+- 7 stream3 stubs.
+
+**Next**
+- Run 12 (BlackCRT): Maya vs Maya with `KIGOLD_HEARTBEAT=1`. Expected: no crash in `stream1_main` at `0x80010944`, `stream3 frames` rising in the beat, and no `[kigold][frame]` lines during the fight. The fight will still look empty or frozen, because the object loops are stubs.
+
 ## 2026-10-13: Run 11 crash traced to the stubbed stream3 frame tail (Phase 2, task 7s)
 
 **Result: cause found by reading code, no fix made. Stopped with options, as the task asked for a fix that is not small.** No source change, nothing regenerated, nothing built, the exe was not run.

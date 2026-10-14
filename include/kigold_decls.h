@@ -59,6 +59,15 @@ namespace kigold {
     // or not: it also logs one [kigold][gfx] line for the first graphics task.
     std::unique_ptr<ultramodern::renderer::RendererContext> count_graphics_tasks(
         std::unique_ptr<ultramodern::renderer::RendererContext> renderer);
+
+    // Counts of the stream3 frame, for the heartbeat line. In
+    // src/game/frame_tail.cpp, always counted, heartbeat or not.
+    struct FrameCounts {
+        uint64_t frames;      // calls of the frame entry at 0x801AE460
+        uint64_t abort_jumps; // jumps straight into the frame tail at 0x801AE6B4
+        uint64_t tail_reruns; // times the tail ran again in the same frame (wrong)
+    };
+    FrameCounts frame_counts();
 }
 
 #endif

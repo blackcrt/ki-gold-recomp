@@ -133,6 +133,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/inflate_hooks.cpp
     ${CMAKE_SOURCE_DIR}/src/game/dp_block.cpp
     ${CMAKE_SOURCE_DIR}/src/game/status_reg.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/frame_tail.cpp
     ${AUDIO_UCODE_SOURCE}
 )
 target_sources(KIGoldRecompiled PRIVATE ${SOURCES})

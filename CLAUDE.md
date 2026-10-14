@@ -70,7 +70,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `tools/romcheck.py` | Checks the ROM, converts byte order |
 | `tools/scan_rom.py` | Recon scan for microcode and Rare compression |
 | `tools/unpack_rom.py` | Builds the decompressed ROM for splat and N64Recomp (output in `build/`, never committed) |
-| `kigold.toml` | N64Recomp config: ROM, symbol file, output folder, and the stub list with a reason for each |
+| `kigold.toml` | N64Recomp config: ROM, symbol file, output folder, the stub list with a reason for each, the instruction patches and the hooks |
 | `rsp/kigold_audio.toml` | RSPRecomp config for the audio microcode. Its output `rsp/kigold_audio.cpp` is generated, never committed |
 | `tools/gen_symbols.py` | Writes `syms/dump.toml` from the split. Its `KEEP_GAME_CODE` list names proven libultra functions that N64Recomp must translate from the game's own code (written with `_game` added) |
 | `tools/regen.py` | Regenerates `RecompiledFuncs/` and `rsp/kigold_audio.cpp` in one command (unpack check, split, symbols, N64Recomp, cleanup, RSPRecomp, report) |
@@ -89,6 +89,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3, and logs when the game enters each stream. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
 | `src/game/dp_block.cpp` | Our own `osDpSetNextBuffer` (the runtime's does nothing). Draws nothing yet: counts the block of raw drawing commands, prints the first 3 as `[kigold][dp]` lines, and sends the game its "DP done" message (message 1 on queue `0x8000CF70`) |
 | `src/game/status_reg.cpp` | Accepts the "FPU usable" bit when stream3's first function writes the CPU status register (the runtime would call `exit()` there). Called from generated code through a `[[patches.hook]]` entry in `kigold.toml` |
+| `src/game/frame_tail.cpp` | Watches the stream3 frame (entry `0x801AE460`, tail `0x801AE6B4`). Fixes nothing: prints `[kigold][frame] ABORT JUMP` when code jumps straight into the tail, and `WRONG` when the tail runs twice in one frame (our build cannot leave the frame early like the N64 does). 8 lines of each kind, then counters in the heartbeat. Called from generated code through five `[[patches.hook]]` entries in `kigold.toml` |
 | `include/kigold_decls.h` | Declarations shared by our source files |
 | `menu/` | Our `recomp.rcss` and the 11 menu icons. The build copies it to `assets/` next to the exe. Not named `assets` because the guard blocks that name |
 | `recompcontrollerdb.txt` | Controller mappings for SDL, copied next to the exe |

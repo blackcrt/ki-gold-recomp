@@ -28,9 +28,9 @@ stubs = [
     "func_80030EF0",
 
     # ---- stream3 (hand-written assembly, option A in PLAN.md) ----
-    # N64Recomp: "Negative offset for lw from stack: -24584".
-    # This is the tail of the stream3 entry at 0x801AE460.
-    "func_801AE6B4_stream3",
+    # func_801AE6B4_stream3, the tail of the frame entry at 0x801AE460, was a
+    # stub here until task 7t. It is translated now, see the two instruction
+    # patches below.
 
     # N64Recomp: "Failed to determine size of jump table" for the next five.
     # They jump through hand-made address tables (table address in brackets).
@@ -56,9 +56,31 @@ stubs = [
     "func_80005E58",    # unnamed (lead: send); calls func_80005D98 3 bytes at a time
 ]
 
+# An instruction patch replaces one instruction of the game before N64Recomp
+# translates it. value is the new instruction as a 32-bit number.
+#
+# The frame tail (func_801AE6B4_stream3) puts the stack pointer back from
+# 0x801D9FF8 and uses $sp itself as the scratch register for that address:
+#     0x801AE6B4: lui $sp, 0x801E          (0x3C1D801E)
+#     0x801AE6B8: lw  $sp, -0x6008($sp)    (0x8FBD9FF8)
+# N64Recomp stops on the second one ("Negative offset for lw from stack: -24584"),
+# because it reads every lw with $sp as base as a stack slot. These two patches
+# use $at as the scratch register instead. The result in $sp is the same, and
+# $at is reloaded from the stack a few lines later (0x801AE704), so nothing
+# else changes.
+[[patches.instruction]]
+func = "func_801AE6B4_stream3"
+vram = 0x801AE6B4
+value = 0x3C01801E # lui $at, 0x801E
+
+[[patches.instruction]]
+func = "func_801AE6B4_stream3"
+vram = 0x801AE6B8
+value = 0x8C3D9FF8 # lw $sp, -0x6008($at)
+
 # A hook adds one line of C to a generated function. N64Recomp writes it on every
 # regeneration, at the start of the function or before the instruction at
-# before_vram. These four call our code in src/game/inflate_hooks.cpp, which tells
+# before_vram. The first four call our code in src/game/inflate_hooks.cpp, which tells
 # the runtime when the game has inflated one of its three code streams.
 
 # Remember which ROM offset each buffer was filled from (both ROM read helpers).
@@ -101,3 +123,33 @@ text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx
 func = "stream3_entry"
 before_vram = 0x801AD9F0
 text = "{ extern void kigold_before_status_write(recomp_context* ctx, gpr value); kigold_before_status_write(ctx, ctx->r3); }"
+
+# The stream3 frame (entry at 0x801AE460, tail at 0x801AE6B4). Three places in
+# stream3 jump straight into the tail to end the frame early. On the N64 that
+# leaves the frame at once. Our translated code returns to the caller instead,
+# which is wrong when the jump comes from inside a routine the entry called
+# (NOTES.md, tasks 7s and 7t). These five hooks call src/game/frame_tail.cpp,
+# which logs every such jump and counts them for the heartbeat.
+[[patches.hook]]
+func = "func_801AE460_stream3"
+text = "{ extern void kigold_on_frame_enter(void); kigold_on_frame_enter(); }"
+
+[[patches.hook]]
+func = "func_801AE6B4_stream3"
+text = "{ extern void kigold_on_frame_tail(void); kigold_on_frame_tail(); }"
+
+# The three jumps (j func_801AE6B4_stream3).
+[[patches.hook]]
+func = "func_801BD9EC_stream3"
+before_vram = 0x801BDA40
+text = "{ extern void kigold_on_frame_abort_jump(uint32_t from); kigold_on_frame_abort_jump(0x801BDA40); }"
+
+[[patches.hook]]
+func = "func_801BDA58_stream3"
+before_vram = 0x801BDC28
+text = "{ extern void kigold_on_frame_abort_jump(uint32_t from); kigold_on_frame_abort_jump(0x801BDC28); }"
+
+[[patches.hook]]
+func = "func_801BDC30_stream3"
+before_vram = 0x801BDC34
+text = "{ extern void kigold_on_frame_abort_jump(uint32_t from); kigold_on_frame_abort_jump(0x801BDC34); }"
