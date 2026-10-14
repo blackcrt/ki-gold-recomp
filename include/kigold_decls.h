@@ -50,10 +50,13 @@ namespace kigold {
     void count_video_tick();
     void count_audio_task();
     void count_inflate();
+    // One block of raw drawing commands passed to osDpSetNextBuffer
+    // (src/game/dp_block.cpp).
+    void count_dp_block();
     // Called by the runtime once for each thread the game creates, on that thread.
     void note_game_thread(const OSThread* thread);
-    // Wraps the renderer so graphics tasks can be counted. Returns it unchanged
-    // while the heartbeat is off.
+    // Wraps the renderer so graphics tasks can be counted. Always on, heartbeat
+    // or not: it also logs one [kigold][gfx] line for the first graphics task.
     std::unique_ptr<ultramodern::renderer::RendererContext> count_graphics_tasks(
         std::unique_ptr<ultramodern::renderer::RendererContext> renderer);
 }

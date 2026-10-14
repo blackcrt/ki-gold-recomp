@@ -131,6 +131,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/tlb.cpp
     ${CMAKE_SOURCE_DIR}/src/game/missing_funcs.cpp
     ${CMAKE_SOURCE_DIR}/src/game/inflate_hooks.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/dp_block.cpp
     ${AUDIO_UCODE_SOURCE}
 )
 target_sources(KIGoldRecompiled PRIVATE ${SOURCES})

@@ -2,6 +2,32 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Own osDpSetNextBuffer and a block logger (Phase 2, task 7m)
+
+**Result: written and builds. The exe was not run**, so it is unproven until run 8 (ground rule 1). No generated code and nothing in `lib/` was touched. No regeneration was needed.
+
+**What was done**
+- New `src/game/dp_block.cpp` with our own `osDpSetNextBuffer_recomp` (option (a) from 7l). It draws nothing. It counts the block, returns 0, and sends message 1 to queue `0x8000CF70` with the public `ultramodern::enqueue_external_message` (same arguments the runtime uses for its own "DP done": no jam, try again if the queue is full).
+- The linker took ours without a duplicate error, so the `kigold.toml` hook fallback was not needed. Checked: the exe contains our stand-in's log text.
+- Block logger: the first 3 blocks are printed command by command as `[kigold][dp]` lines (number, offset, the two raw words, the command's name, its main values). After that no more blocks are printed. A command whose first byte does not have the top two bits set gets a note, since the chip ignores those bits but a renderer may not.
+- Heartbeat line has a new counter, `DP blocks`.
+- The renderer wrapper is now always on (before: only with the heartbeat). It prints one `[kigold][gfx] FIRST GRAPHICS TASK` line when the first display list reaches the renderer, with the number of DP blocks seen before it.
+
+**How the queue and message were confirmed**
+- Read in the generated code for the game's own boot code, not taken from the 7l note: `0x80001E4C` `osCreateMesgQueue(0x8000CF70, 0x8000CFA8, 5)`, `0x80001E60` `osSetEventMesg(9, 0x8000CF70, 1)`, `0x80001E74` `osSetEventMesg(4, 0x8000CF70, 2)`. Event 9 is `OS_EVENT_DP` in the runtime's `ultra64.h`.
+- Run 7 agrees: thread 20 waited on `0x8000CF70` (0 of 5).
+- Both call sites (`0x80002490`, `0x80002534`) pass the block in a0 and the size in a3 (a2 is 0), skip the flag byte `0x8000D186` only when the return value is -1, and otherwise set it to 1.
+- The runtime keeps the registered queue in a private place and has no public way to ask for it, so the two values are constants in our file. Safety check: if the queue at `0x8000CF70` does not have 5 slots, nothing is sent and one loud WARNING line is printed.
+
+**Not proven, to watch in run 8**
+- That the scheduler really goes on after message 1 and starts the task (static reading only).
+- The game expects message 1 twice per frame: once for the block, once when the task is done. The runtime sends the second one itself after the renderer has the task.
+- The block's drawing is lost: no screen clear and no background picture. The picture may look wrong even if everything else works.
+
+**Next**
+- Run 8 with `KIGOLD_HEARTBEAT=1`. Look for the `[kigold][dp]` block lines, the `[kigold][gfx]` line, and `DP blocks` and `graphics tasks` going up in the beat lines.
+- After run 8: decide how to draw the block (b1, b2, c, or a fork of RecompFrontend with a small raw DP hook). Not started.
+
 ## 2026-10-13: Run 7 confirms the DP wait, plan for osDpSetNextBuffer (Phase 2, task 7l)
 
 **Result: plan only. No code, no generated code, nothing in `lib/` changed. Not committed yet.** Everything below is static reading and is unproven until a run shows it (ground rule 1).

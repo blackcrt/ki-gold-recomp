@@ -74,6 +74,8 @@ namespace {
         std::atomic<uint64_t> graphics_tasks{ 0 };
         std::atomic<uint64_t> audio_tasks{ 0 };
         std::atomic<uint64_t> inflates{ 0 };
+        std::atomic<uint64_t> dp_blocks{ 0 };
+        std::atomic<bool> told_first_graphics_task{ false };
         std::mutex threads_mutex;
         std::vector<KnownThread> threads;
     };
@@ -87,7 +89,8 @@ namespace {
         return a >= CONSOLE_RAM_START && a - CONSOLE_RAM_START < CONSOLE_RAM_SIZE && (a & 3) == 0;
     }
 
-    // Passes every call through to the real renderer and counts the graphics tasks.
+    // Passes every call through to the real renderer and counts the graphics
+    // tasks. Says so once, loudly, when the first one arrives.
     class CountingRenderer final : public ultramodern::renderer::RendererContext {
     public:
         explicit CountingRenderer(std::unique_ptr<ultramodern::renderer::RendererContext> renderer)
@@ -102,7 +105,16 @@ namespace {
         }
         void enable_instant_present() override { inner->enable_instant_present(); }
         void send_dl(const OSTask* task) override {
-            state().graphics_tasks.fetch_add(1, std::memory_order_relaxed);
+            State& s = state();
+            s.graphics_tasks.fetch_add(1, std::memory_order_relaxed);
+            // Printed before the renderer gets the task, so the line is there
+            // even if the renderer then fails on it.
+            if (!s.told_first_graphics_task.exchange(true)) {
+                fprintf(stderr,
+                    "[kigold][gfx] FIRST GRAPHICS TASK reached the renderer: display list at 0x%08X (%u bytes), microcode at 0x%08X, DP blocks before it: %llu\n",
+                    (uint32_t)task->t.data_ptr, (uint32_t)task->t.data_size, (uint32_t)task->t.ucode,
+                    (unsigned long long)s.dp_blocks.load(std::memory_order_relaxed));
+            }
             inner->send_dl(task);
         }
         void send_dummy_workload(uint32_t fb_address) override { inner->send_dummy_workload(fb_address); }
@@ -340,9 +352,10 @@ namespace {
                 threads = s.threads;
             }
             fprintf(stderr,
-                "[kigold][beat] ---- %lld s: video ticks %llu, graphics tasks %llu, audio tasks %llu, inflates %llu, game threads %zu ----\n",
+                "[kigold][beat] ---- %lld s: video ticks %llu, DP blocks %llu, graphics tasks %llu, audio tasks %llu, inflates %llu, game threads %zu ----\n",
                 seconds,
                 (unsigned long long)s.video_ticks.load(std::memory_order_relaxed),
+                (unsigned long long)s.dp_blocks.load(std::memory_order_relaxed),
                 (unsigned long long)s.graphics_tasks.load(std::memory_order_relaxed),
                 (unsigned long long)s.audio_tasks.load(std::memory_order_relaxed),
                 (unsigned long long)s.inflates.load(std::memory_order_relaxed),
@@ -368,6 +381,10 @@ void kigold::count_audio_task() {
 
 void kigold::count_inflate() {
     state().inflates.fetch_add(1, std::memory_order_relaxed);
+}
+
+void kigold::count_dp_block() {
+    state().dp_blocks.fetch_add(1, std::memory_order_relaxed);
 }
 
 void kigold::note_game_thread(const OSThread* thread) {
@@ -402,7 +419,7 @@ void kigold::note_game_thread(const OSThread* thread) {
 
 std::unique_ptr<ultramodern::renderer::RendererContext> kigold::count_graphics_tasks(
         std::unique_ptr<ultramodern::renderer::RendererContext> renderer) {
-    if (!state().on.load(std::memory_order_relaxed) || renderer == nullptr) {
+    if (renderer == nullptr) {
         return renderer;
     }
     return std::make_unique<CountingRenderer>(std::move(renderer));
@@ -415,7 +432,7 @@ void kigold::start_heartbeat() {
     }
     state().on.store(true);
     fprintf(stderr, "[kigold][beat] heartbeat on, one beat every %lld seconds\n", (long long)BEAT_INTERVAL.count());
-    fprintf(stderr, "[kigold][beat] counters: video ticks = video frames of the runtime since the game started, each one sends the game a video interrupt message; graphics tasks = display lists handed to the renderer; audio tasks = sound tasks run; inflates = calls of the game's inflate helper\n");
+    fprintf(stderr, "[kigold][beat] counters: video ticks = video frames of the runtime since the game started, each one sends the game a video interrupt message; DP blocks = blocks of raw drawing commands the game passed to osDpSetNextBuffer (not drawn yet); graphics tasks = display lists handed to the renderer; audio tasks = sound tasks run; inflates = calls of the game's inflate helper\n");
     fprintf(stderr, "[kigold][beat] stack: A < B means A was called from B. An address is a game function (N64 address, look it up in syms/dump.toml; a libultra name there means the runtime's own version ran). A ? means several game functions share that PC code\n");
 #ifndef KIGOLD_CAN_WALK_STACKS
     fprintf(stderr, "[kigold][beat] stacks are Windows x64 only, lines will have no stack part\n");
