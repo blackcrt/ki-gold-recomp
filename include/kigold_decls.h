@@ -44,6 +44,12 @@ namespace kigold {
     // Name of a section of the generated section table: boot, stream1, 2 or 3.
     const char* section_name(uint32_t section);
 
+    // Exit guard, in src/main/exit_guard.cpp. Call once at the start of main, on
+    // the main thread. From then on an exit() on any other thread (the runtime
+    // does that on fatal errors) ends the process at once instead of running the
+    // program cleanup there, which crashed in runs 9 and 12.
+    void install_exit_guard();
+
     // Heartbeat, in src/main/heartbeat.cpp. Off unless the environment variable
     // KIGOLD_HEARTBEAT is set. The count_ and note_ calls do nothing while it is off.
     void start_heartbeat();

@@ -128,12 +128,14 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/main/register_overlays.cpp
     ${CMAKE_SOURCE_DIR}/src/main/crash_reporter.cpp
     ${CMAKE_SOURCE_DIR}/src/main/heartbeat.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/exit_guard.cpp
     ${CMAKE_SOURCE_DIR}/src/game/tlb.cpp
     ${CMAKE_SOURCE_DIR}/src/game/missing_funcs.cpp
     ${CMAKE_SOURCE_DIR}/src/game/inflate_hooks.cpp
     ${CMAKE_SOURCE_DIR}/src/game/dp_block.cpp
     ${CMAKE_SOURCE_DIR}/src/game/status_reg.cpp
     ${CMAKE_SOURCE_DIR}/src/game/frame_tail.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/computed_jump.cpp
     ${AUDIO_UCODE_SOURCE}
 )
 target_sources(KIGoldRecompiled PRIVATE ${SOURCES})

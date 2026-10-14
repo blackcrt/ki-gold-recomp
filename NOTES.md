@@ -2,6 +2,59 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Run 12, two computed jumps done in our code, one missing function start, clean exit (Phase 2, task 7u)
+
+**Result: the run 12 stop is fixed in our own code and checked by a stand-alone test (32 of 32 pass). One more missing function start was found before a run tripped over it. Regenerated once, builds and links. The exe was not run**, so nothing here is proven in the game until run 13 (ground rule 1).
+
+**Run 12 (BlackCRT):** no crash at `0x80010944`. Stage loaded. Then `Failed to find function at 0x800322EC` and the same `exit()` cleanup crash in RmlUi as in run 9. Game callers: `func_80032200` < `func_8002585C` < `func_80025430` < `stream1_main`.
+- The main loop calls the frame function at `0x80010628`, the old crash point is `0x80010944`, and `func_80025430` is called at `0x80010DBC`. So run 12 got past the old crash and stopped further down in the same loop pass.
+- `stream3 frames 0` in the log proves nothing either way: the last beat (20 s) is from before the fight data finished loading. Run 13 will show the count.
+
+**1. What jumps to `0x800322EC`**
+- `func_80032200` itself (`0x80032200` to `0x800323A4`, hand-written assembly), with `jr $t5` at `0x800322DC`. The target is worked out from a count: `$t5 = 0x800322E4 + (7 - count) * 8`.
+- `0x800322E4` is the start of a straight run of 7 store pairs (`sh $t3, n*2($t0)` and `sb $t9, n($t1)`, n from 6 down to 0), followed by `jr $ra` at `0x8003231C`. The jump enters the run so that exactly `count` pairs run (0 to 7). Run 12 had count 6.
+- So it is **not a function start** and **not a jump table** (no address table). It is a computed jump into the middle of the function's own code. N64Recomp turns such a `jr` into a function lookup, which fails.
+- The function fills a row: 16-bit values into the buffer whose address is at `0x80061378`, and bytes (`0xC0`) into the one at `0x8006137C`. It looks like drawing into an image and a byte-per-pixel buffer. Not proven.
+- Its twin `func_800323A4` has the same trick at `0x80032424` (bytes only, run from `0x8003242C` to `0x80032448`). `func_8002585C` calls the twin right after, so it would have been the next stop.
+
+**2. The fix (decision by BlackCRT: hook plus our own C, with a test and a short log)**
+- `src/game/computed_jump.cpp` (new): one function per jump. It reads the target the game's own code has put in `$t5`, does the stores from there to the end of the run in the same order, and changes no register. A target that is not one of the 8 stops the game with `[kigold][jump] FATAL`.
+- `kigold.toml`: two `[[patches.hook]]` entries just before each `jr`. The hook calls our function and then returns from the generated function. Checked in the generated code: the failing lookup behind the hook can no longer be reached.
+- Log: the first 4 calls of each jump print `[kigold][jump] 0x800322DC (func_80032200): computed jump to 0x..., count N`, then quiet.
+- No symbol changes for these two, no pseudo-functions.
+
+**The test (`tools/jumptest`, new, run with `sh tools/jumptest/run.sh`)**
+- A small interpreter runs the game's real instructions, read at run time from `build/kigold.decompressed.z64` (nothing from the ROM is in the repo or printed). Our C is the real source file, built with `KIGOLD_JUMP_TEST`, which reports each store.
+- For both jumps, counts 0 to 7, two memory layouts (even addresses, and addresses that are not multiples of 4): same stores, same order, same 32 registers, same memory. **32 of 32 pass.** Example: count 6 jumps to `0x800322EC` and does 12 stores, `sh t0+0xA, sb t1+5` down to `sh t0+0x0, sb t1+0`.
+- Negative control (not committed): with one offset in our C changed on purpose, 18 of 32 pass and the test prints both store lists.
+- Not tested: a count outside 0 to 7 (our code stops with FATAL, the N64 would jump somewhere else).
+
+**3. More of the same in boot and stream1 (static search, throwaway script)**
+- `jr` through a register: 33. 27 are jump tables and N64Recomp found every one (a `switch` in the generated code). 3 are in libultra's exception code, which N64Recomp skips (the runtime has its own). The other 3 are lookups: `0x8000042C` (fixed in 7f), and the two computed jumps above.
+- `jalr`: 61 (58 lookups). Their targets are pointers, so I searched for every code address the game can name: all `lui`/`addiu` pairs and all data words. Only three are not function starts: the two computed-jump runs, and **`0x8001ACB0`**.
+- **`0x8001ACB0` is a real function start, the `0x80000450` case.** An empty function (`jr $ra`, `nop`) right after the end of `func_8001AAE0`. Its address is stored in the pointer slot `0x8004A928` in three places, and `stream1_main` calls through that slot at `0x800109CC`. Fixed the 7f way: one line in `disasm/symbol_addrs.txt` with the evidence. `syms/dump.toml`: `func_8001AAE0` is now `0x1D0` bytes, new `func_8001ACB0` is 8 bytes, and it is in `recomp_overlays.inl`.
+- Data words into the middle of a function: only the 602 entries of the 28 jump tables (27 in stream1, 1 in boot for `__osException`).
+- From stream2 and stream3 (code and data) into boot or stream1: none. 17 raw hits, none a multiple of 4, so they are data values.
+- Limits: static only. A pointer built by arithmetic at run time, or one that sits in data the game inflates at run time, is not covered. The indirect jumps inside stream2 and stream3 were not part of this search (stream3 has the 5 jump-table stubs and the 86 table addresses).
+
+**4. Clean exit**
+- The runtime's `get_function` prints the line and calls `std::exit()` on the game thread (`librecomp/src/overlays.cpp`, line 369). `exit()` runs the whole program cleanup there, and RmlUi's global cleanup crashes.
+- Option A, done (`src/main/exit_guard.cpp`, new, about 20 lines of code): an `atexit` function registered at the start of `main`. `exit()` runs it before it destroys the global objects that existed before `main`. On a thread that is not the main thread it prints a `[kigold][exit]` line, flushes, and ends the process with `_Exit`. On the main thread (a normal end) it does nothing. Covers both known places (this one and the status register one from run 9). Exit code is then always 1, which is what the runtime passes anyway. **Not proven**: it only shows when the runtime next hits such an error.
+- Option B, not done: change the two `std::exit` calls in our runtime fork to the runtime's own `ultramodern::error_handling::quick_exit`. Cleaner (stops before any cleanup, names file and line), but it is a second fork change and needs an entry in `docs/RUNTIME_FORK.md`. Worth doing when the fork is touched next.
+- Not possible from `src/`: replacing `get_function` (the linker would see two) or the `LOOKUP_FUNC` macro (it is in the runtime's `recomp.h`).
+
+**Commands**
+- `sh tools/jumptest/run.sh`: 32 of 32 pass.
+- `python3 tools/regen.py`: exit 0, 1326 function bodies (1325 before), N64Recomp and RSPRecomp exit 0.
+- `tools/build.ps1 -Build`: `Build OK`.
+
+**Open**
+- All of 7t's open points: abort paths of the frame tail, the 7 stream3 stubs.
+- Option B for the exit.
+
+**Next**
+- Run 13 (BlackCRT): Maya vs Maya with `KIGOLD_HEARTBEAT=1`. Expected: up to 4 `[kigold][jump]` lines per jump at fight load, no `Failed to find function`, `stream3 frames` rising. The fight will still look empty or frozen (object loops are stubs).
+
 ## 2026-10-13: Frame tail translated, abort jumps logged, the other stubs listed (Phase 2, task 7t)
 
 **Result: the frame tail `func_801AE6B4_stream3` is no longer a stub. N64Recomp accepted the two instruction patches on the first try. Regenerated once, builds and links. The exe was not run**, so nothing here is proven until run 12 (ground rule 1).

@@ -228,6 +228,7 @@ int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[kigold] main start\n");
     kigold::install_crash_reporter();
+    kigold::install_exit_guard();
     // Does nothing unless the environment variable KIGOLD_HEARTBEAT is set.
     kigold::start_heartbeat();
 

@@ -153,3 +153,20 @@ text = "{ extern void kigold_on_frame_abort_jump(uint32_t from); kigold_on_frame
 func = "func_801BDC30_stream3"
 before_vram = 0x801BDC34
 text = "{ extern void kigold_on_frame_abort_jump(uint32_t from); kigold_on_frame_abort_jump(0x801BDC34); }"
+
+# Two computed jumps in stream1 (func_80032200 and func_800323A4): a "jr $t5"
+# into the middle of a run of 7 stores, so that only the stores still needed
+# run. N64Recomp turns such a jr into a lookup of a function at that address,
+# which fails ("Failed to find function at 0x800322EC", run 12). Each hook sits
+# just before the jr, lets our code in src/game/computed_jump.cpp do the stores
+# from the target on, and returns from the function, as the "jr $ra" at the end
+# of the run would. Checked against the game's instructions by tools/jumptest.
+[[patches.hook]]
+func = "func_80032200"
+before_vram = 0x800322DC
+text = "{ extern void kigold_computed_jump_800322DC(uint8_t* rdram, recomp_context* ctx); kigold_computed_jump_800322DC(rdram, ctx); return; }"
+
+[[patches.hook]]
+func = "func_800323A4"
+before_vram = 0x80032424
+text = "{ extern void kigold_computed_jump_80032424(uint8_t* rdram, recomp_context* ctx); kigold_computed_jump_80032424(rdram, ctx); return; }"
