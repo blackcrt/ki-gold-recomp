@@ -2,6 +2,33 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: TLB swap stopped, the renderer reads the block every frame (Phase 2, task 7q)
+
+**Result: stopped before writing game code, as the task asked for this case.** The game build is unchanged, nothing regenerated, nothing in `lib/` touched, the exe was not run. Only the stand-alone test got one more printed line (how long the block is gone).
+
+**What the renderer does with the block pointer** (read from `lib/`, not run)
+- At creation: nothing harmful. `rt64_render_context.cpp` line 238 stores the pointer (`appCore.RDRAM = rdram`). No write watch, no page protection tricks, nothing registered with the graphics card. Since the address stays the same, the stored pointer stays valid.
+- Every frame: it reads the block from its own thread. The runtime's video thread (`events.cpp`, `vi_thread_func`, started in `preinit`) queues a screen update 60 times a second, game started or not. The graphics thread then runs `State::updateScreen` (`rt64_state.cpp`), which copies the framebuffer out of the block (line 1916, `memcpy` from `RDRAM[screenFbAddress]`) and hashes it (line 1883). Until the game sets its own framebuffer, that is the runtime's dummy framebuffer at `0x80700000` (or `0x80725800`).
+- One presentation mode (`PresentEarly`) returns before that read. We use `PresentationMode::Console` (`main.cpp` line 302), so the read happens.
+- Before the game starts, the same thread also draws a dummy rectangle each frame, which can write into the block. At `on_init` the game counts as started, so those have stopped (one may still be in the queue).
+
+**Why that breaks the swap as specified**
+- Between "release the block" and "section mapped" the block does not exist. A read in that gap is an access violation on the graphics thread.
+- Measured with `tools/tlbtest` (3 runs): the gap is about 21 milliseconds. One frame is 16.7 milliseconds. So a read lands in the gap on nearly every start, and the game would crash at start-up almost every time.
+- Likely cause of the long gap (reasoned, not measured): the zero-page check reads all 512 MB of the old block, Windows then gives every page real memory, and the release has to free 131072 pages. Not doing the check would shorten the gap a lot but not remove it, and any gap leaves a crash chance on every start.
+- 7p could not show this: the test has one thread.
+
+**Options**
+- (1) Pause every other thread of the process during the swap (`SuspendThread` on each, then the copy and the 4 system calls, then `ResumeThread`). Stays in `src/`, keeps decision (a). A paused thread cannot read the block, and it cannot take the freed address either, so this also closes the "tiny window" risk from 7o. The pause is a fraction of a second, once, at game start. Risk: a paused thread may hold a lock (for example the memory allocator's), so the code inside the pause must not allocate or print. The 4 calls are plain system calls, so that is doable. Can be proven in `tools/tlbtest` first, with a second thread that reads the block the whole time: it must crash without the pause and pass with it.
+- (2) Fork N64ModernRuntime now (7o's option c1): the block is a section from the first moment, no release, no gap, no pause. The cleanest result, but it is the fork BlackCRT wanted to keep as the fallback.
+- (3) Option (b) of 7o (check for low addresses in the `MEM_` macros): no operating system tricks at all, costs a compare on every memory access and a full regeneration.
+- Recommendation: (1), proven in the test first (small task), then the real thing. If the proof fails or the pause looks fragile in the game, (2).
+
+**Not started** (waits for the decision): the `on_init` swap, real `osMapTLB` and `osUnmapTLB`, the `[kigold][tlb]` MAPPED lines, the loud log in `osVirtualToPhysical`.
+
+**Next**
+- BlackCRT and the coach pick an option. With (1): task "7q-a" adds the reader thread to `tools/tlbtest`, then 7q as written plus the pause.
+
 ## 2026-10-13: TLB proof test passes (Phase 2, task 7p)
 
 **Result: both unproven Windows points of option (a) are proven by a stand-alone test, 24 of 24 checks pass.** The game build was not changed, nothing regenerated, nothing in `lib/` touched. Task 7o was committed on its own first.

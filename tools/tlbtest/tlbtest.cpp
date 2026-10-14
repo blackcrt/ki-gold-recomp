@@ -171,6 +171,9 @@ int main() {
 
     // Release the plain block, take the same address back as one placeholder,
     // split it in two, and put the section into the first 512 MB.
+    LARGE_INTEGER gap_frequency, gap_start, gap_end;
+    QueryPerformanceFrequency(&gap_frequency);
+    QueryPerformanceCounter(&gap_start);
     bool rebuilt = VirtualFree(block, 0, MEM_RELEASE) != 0;
     void* placeholder = rebuilt ? pVirtualAlloc2(nullptr, first_address, kBlockSize, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS, nullptr, 0) : nullptr;
     check(placeholder == first_address, "Release the block and reserve the same address again as a placeholder");
@@ -179,7 +182,12 @@ int main() {
     }
     bool split = VirtualFree(block, kRamSize, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER) != 0;
     void* ram = split ? pMapViewOfFile3(section, nullptr, block, 0, kRamSize, MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0) : nullptr;
+    QueryPerformanceCounter(&gap_end);
     check(ram == block, "Map the section over the first 512 MB of the block");
+    // How long the block did not exist. In the game, another thread that reads
+    // the block in this gap would crash.
+    std::printf("      the block was gone for about %.0f microseconds\n",
+        static_cast<double>(gap_end.QuadPart - gap_start.QuadPart) * 1000000.0 / static_cast<double>(gap_frequency.QuadPart));
     if (fails != 0) {
         return 1;
     }
