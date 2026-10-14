@@ -2,6 +2,45 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Run 11 crash traced to the stubbed stream3 frame tail (Phase 2, task 7s)
+
+**Result: cause found by reading code, no fix made. Stopped with options, as the task asked for a fix that is not small.** No source change, nothing regenerated, nothing built, the exe was not run.
+
+**Run 11 (BlackCRT):** the TLB works. 6 `MAPPED` lines, no `FATAL`, no crash in `func_8001D4BC`, all stage inflates ran. New crash in `stream1_main` (`0x8000FAA0`), READ of `0x2804A354`.
+
+**1. The instruction and the pointer**
+- Crash address exe + 0x6704A = `stream1_main` (exe + 0x644F0 in the map) + 0x2B5A. The x86 there is the load for `0x80010944: lwc1 $f12, 0xC($s0)`.
+- `s0 = 0x8004A348 + s5 * 48` (`0x800108E0` to `0x80010920`). `s5` is the player loop counter and must be 0 or 1. `0x2804A354` needs `s5` to end in `0x3800000`, for example `0x43800000`, which is 256.0 as a float.
+- `s5` is set to 0 at `0x800103F4`. The branch at `0x800106D8` skips the second `s5 = 0` (`0x8001080C`), so the code relies on every call in between giving `s5` back unchanged.
+- One of those calls is `func_80011824` (the frame function). At `0x800119DC` it calls `func_801AE460_stream3`, stream3's per-frame entry. That entry is hand-written: it saves every register on the stack (`s5` at `0x54($sp)`), lowers `sp` by `0x80` + `0x88`, saves `sp` to `0x801D9FF8`, parks the float registers, runs the frame, and falls into `func_801AE6B4_stream3`.
+- `func_801AE6B4_stream3` is the restore code: `sp` from `0x801D9FF8`, all float registers, all integer registers, `sp` again, interrupts back on, return value from `0x801D8876`, `jr $ra`. **It is one of our 8 stubs, so it does nothing.** N64Recomp's error for it ("Negative offset for lw from stack: -24584") is the `lw $sp, -0x6008($sp)` at `0x801AE6B8`.
+- So after the first fight frame, `sp` is `0x108` too low and no register is restored. `func_80011824` then restores `s5` from `0x2C($sp)`, which now points into the parked float registers (the low half of `$f10`). `s5` gets float bits, `stream1_main` uses it as a table index, crash.
+- Not involved: the TLB, delay slots, `tools/fix_fallthroughs.py` (the fall-through chain into the tail is correct), jump tables.
+- Not proven by a run: the exact value of `s5` (only its low 28 bits follow from the crash address).
+
+**2. Thread 73 ending is normal**
+- Its function `func_801CCC8C_stream2` waits on queue `0x802D3D48`. Message 1 makes it call `osDestroyThread(0)` at `0x801CCD18` (0 means "this thread"). This is the game's only `osDestroyThread` call.
+- `func_801CCF10_stream2` sends that message 1 (`osSendMesg`, blocking) and then calls `osSetThreadPri(thread 73, 127)`, so the worker runs at once and ends. That is the `pri 127` in the beat. It is called from `stream2_entry`.
+- This makes sense: stream3 is inflated over stream2's code (`0x801AD900`), so the game stops the stream2 thread first.
+- Run 10 showing `ENDED` only after the crash is most likely beat timing (one beat every 2 seconds). Not checked, the run 10 log is gone.
+
+**3. Why this is not a small fix**
+- The tail is also an "abort this frame" exit. `0x801BDA40` and `0x801BDC28` jump to it from inside other routines. Example: the entry calls `0x801AE7A4` with `jal`, that jumps to `func_801BDA58_stream3`, that jumps to the tail. On the N64 the tail resets `sp` and returns to `0x800119E4`, skipping the rest of the entry.
+- Generated C cannot skip like that. With the tail simply un-stubbed, an abort path would return into the middle of the entry, run three more routines (`0x801C22B0`, `0x801AEC58`, `0x801C27C4`) and the tail a second time, with the save area possibly overwritten.
+
+**Options**
+- (1) Un-stub the tail with two `[[patches.instruction]]` entries in `kigold.toml`: use `$at` instead of `$sp` as the scratch register at `0x801AE6B4` and `0x801AE6B8` (`$at` is reloaded from the stack at `0x801AE704`, so the result is the same). N64Recomp's check only fires when the base register is `$sp` (`analysis.cpp` line 168). One regeneration. Fixes normal frames, wrong on abort paths. Not tried, N64Recomp may complain about something else in the tail.
+- (2) Option 1 plus a real non-local exit in our own code: a hook at the start of the entry marks a return point (`setjmp`), a hook at the end of the tail jumps back to it (`longjmp`) when the tail was reached from a nested call. Correct on all paths. Needs a short design task first.
+- (3) Write the tail by hand in `src/game/` instead of the instruction patch. Same abort problem, more of our own code. No advantage seen.
+- Recommendation: (1) as the next task, with a log line that shows when an abort path is taken, then run 12. Then (2). Each step proven by a run.
+
+**Open**
+- The other 7 stubs are still empty. The 5 jump-table routines and the 2 Count-register routines are in stream3 and fight frames will reach them.
+- The tail also sets the return value (`$v0`, stored to `0x8004A3AC` at `0x800119F0`). The main code gets garbage there today.
+
+**Next**
+- BlackCRT and the coach pick an option.
+
 ## 2026-10-13: Runtime fork and real TLB mapping (Phase 2, task 7r)
 
 **Result: the runtime is forked, its memory block is section-backed from the start, and `osMapTLB`/`osUnmapTLB` really map pages. It builds and links. The exe was not run**, so nothing here is proven in the game until run 11 (ground rule 1). Nothing regenerated.
