@@ -2,6 +2,46 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Runtime fork and real TLB mapping (Phase 2, task 7r)
+
+**Result: the runtime is forked, its memory block is section-backed from the start, and `osMapTLB`/`osUnmapTLB` really map pages. It builds and links. The exe was not run**, so nothing here is proven in the game until run 11 (ground rule 1). Nothing regenerated.
+
+**Decision (BlackCRT, after the 7q stop):** option 2, fork N64ModernRuntime now. This pulls one of the three forks on the before-going-public list forward. The swap in `on_init` and the thread pause are dropped.
+
+**A. Fork and repoint** (commit `8d9713b`)
+- `gh repo fork N64Recomp/N64ModernRuntime --clone=false` made the public `blackcrt/N64ModernRuntime`.
+- `.gitmodules` points there, with `branch = kigold`. In the submodule, `origin` is the fork and `upstream` is the original.
+- Branch `kigold` was pushed at exactly the old pin: `git ls-remote origin kigold` printed `4dc67eda958e5bf7d347e204eaa21798bc306a41`. Build: nothing to recompile, as expected.
+- Side effect, good: the pin was 109 commits off upstream `main` and on no upstream branch. It now sits on a branch we own.
+
+**B. The runtime change** (fork commit `45f0c58`, our commit `9bb0673`)
+- One commit, two files (`librecomp/src/recomp.cpp`, `librecomp/include/librecomp/game.hpp`), 47 lines added, 10 removed, Windows branch only.
+- The block is reserved as one 4 GB placeholder (`VirtualAlloc2`), the first 512 MB are split off and replaced by a view of a 512 MB section (`MapViewOfFile3`). No swap, no copy, no gap. New `void* recomp::get_rdram_section()` returns the section handle. At exit the view is unmapped, so "Failed to free rdram" should not appear.
+- Side effects: Windows 10 version 1803 is now the minimum (older: the existing "Failed to allocate memory!" box). The old code committed all 4 GB, the new one commits 512 MB.
+- `docs/RUNTIME_FORK.md` lists the change, the reason, the check command and the rules. `CLAUDE.md`'s `lib/` row names the one exception to "never edit".
+
+**C. The test** (commit `9f1b9b4`, `tools/tlbtest`)
+- Part 1 now uses the fork's calls in the fork's order. The plain `VirtualAlloc`, the copy, the rebuild and the gap timer are gone.
+- Part 4 runs the 1000 remaps while a second thread reads a framebuffer-sized piece at `0x80700000` and the fighter block's physical pages the whole time, like the renderer does.
+- Result: 26 of 26 pass. The reader finished 3490 full reads during the remaps, never faulted, and saw the same data every time. One full remap still takes about 34 microseconds.
+
+**D. `src/game/tlb.cpp`**
+- A table of 32 entries, two pages each (even and odd), behind one lock.
+- `osMapTLB`: removes the entry's old views, then maps each page whose physical address is not `0xFFFFFFFF` as a 4 KB view at block start + 2 GB + virtual address. The virtual address is rounded down to an even page, like the CPU does.
+- `osUnmapTLB`: removes the entry's views and leaves placeholders.
+- Stops the game with a `[kigold][tlb] FATAL:` line on: index outside 0 to 31, page mask other than 0 (4 KB), a virtual address at or above `0x80000000`, a physical address that is not a 4 KB page inside the 512 MB, a virtual page already mapped by another entry, no section from the runtime, or a failed Windows call.
+- Log: `(MAPPED, n page(s))` and `(UNMAPPED, n page(s))`. Unmaps of empty entries print nothing (the game unmaps 0 to 30 before every remap). After 64 lines one "further TLB lines are hidden" line, then silence. Errors are never hidden.
+- The address space ID is logged and otherwise ignored.
+- `main.cpp` is unchanged. There is no `on_init` work.
+
+**Open**
+- `osVirtualToPhysical` with a low address: the runtime returns it unchanged. Deferred by decision, nothing built. Idea for later: give the game's copy another name in `tools/gen_symbols.py` and mark it ignored in `kigold.toml`, so generated code calls a small function of ours that logs and passes on (needs one regeneration, not proven). Watch for odd behaviour around fighter data in run 11.
+- Whether the game remaps per round is still unknown. The log cap is there in case it does.
+- `lib/RecompFrontend` and `lib/rt64` are still upstream pins (fork checklist: 1 of 3).
+
+**Next**
+- Run 11 (BlackCRT): Maya vs Maya as in run 10. Expected: 6 `MAPPED` lines at fight load and no crash in `func_8001D4BC`. Then the DP clear.
+
 ## 2026-10-13: TLB swap stopped, the renderer reads the block every frame (Phase 2, task 7q)
 
 **Result: stopped before writing game code, as the task asked for this case.** The game build is unchanged, nothing regenerated, nothing in `lib/` touched, the exe was not run. Only the stand-alone test got one more printed line (how long the block is gone).
