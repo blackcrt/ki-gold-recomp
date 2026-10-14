@@ -2,6 +2,40 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: TLB proof test passes (Phase 2, task 7p)
+
+**Result: both unproven Windows points of option (a) are proven by a stand-alone test, 24 of 24 checks pass.** The game build was not changed, nothing regenerated, nothing in `lib/` touched. Task 7o was committed on its own first.
+
+**Decisions (BlackCRT, after 7o)**
+- Option (a): shared host memory, all in our `src/`, no `lib/` change. A runtime fork stays on the before-going-public list and is only the fallback.
+- Windows 10 version 1803 or newer is the minimum.
+- Proof test first (this task).
+
+**The test** (`tools/tlbtest/tlbtest.cpp`, built and run by `tools/tlbtest/build.ps1`, output in `build-tlbtest/`, ignored)
+- Our own code, one file, no game or runtime code. Built with the same x64 clang-cl environment as the game.
+- Part 1: reserves 4 GB exactly like the runtime (plain `VirtualAlloc`, first 512 MB read/write), writes test data, copies the pages that hold data into a new 512 MB section, releases the block, takes the same address back as one placeholder (`VirtualAlloc2`), splits it and maps the section over the first 512 MB (`MapViewOfFile3`). The data is still there, and everything above 512 MB still raises an access violation (so the crash reporter keeps working).
+- Part 2: maps 4 KB views at virtual `0x00000000` to physical `0x3A4000` and virtual `0x00090000` to `0x00099FFF` to physical `0x1DB000` to `0x1E4FFF`. Neither side is 64 KB aligned, and it works. Write low, read physical and the other way round: both match, all 11 pages. The pages next to the mappings still fault.
+- Part 3: unmap (pages fault again, physical data is kept), remap the same virtual pages to other physical pages (`0x200000`, `0x1E5000`), check both directions, check the old physical pages were not touched. Then a different fighter (`0x0008xxxx`).
+- Part 4: 1000 full remaps (unmap 11 pages, map 11 pages): about 34 microseconds each. Nothing to worry about even if it ran per round.
+- `VirtualAlloc2` and `MapViewOfFile3` are not in `kernel32.lib`. The test looks them up by name in `kernelbase.dll`, so no extra link library is needed. Use the same in 7q.
+- Two small traps hit while writing it, both in the test only: output piped through `powershell.exe` is buffered and lost on a crash (fixed with `setvbuf`), and clang-cl only catches an access violation in `__try` when it comes from a function call, not from a plain read.
+
+**Does the runtime write into its block before `on_init`? Yes** (read from `lib/N64ModernRuntime/librecomp/src/recomp.cpp`, `init()` at line 494, called at line 715, one line before `on_init_callback`)
+- The first 1 MB of the ROM from `0x1000`, copied to the entrypoint address (the boot code and stream1's start).
+- Patch data at `0x80801000` (`read_patch_data`). We have no patches yet, so this is empty today.
+- Four boot variables at `0x80000300` to `0x80000318` (TV type, ROM base, reset type, memory size).
+- Nothing else. The heap and save setup come after `on_init`. All of it is inside the first 512 MB.
+- **How to keep it:** create the section first, look at it through a temporary view, copy every 4 KB page of the old block that is not all zero, then release and rebuild. That is what the test does (it finds exactly the 4 pages it wrote). It does not depend on knowing what the runtime wrote, so it stays right if a later runtime version writes more.
+- The block address does not change, so every pointer the runtime already handed out stays valid. The renderer and task threads get the pointer in `preinit`, before `on_init`. Both threads (`events.cpp`) then wait on a queue until the game sends work, and the game has not started yet at `on_init`. What RT64 itself does with the pointer when it is created was not read. Not proven by a run; if 7q shows a start-up crash, look here first.
+
+**Still open for 7q**
+- The tiny window between release and reserve where another thread could take the address. The test has one thread, so it cannot show this. In the game it must be a loud start-up error (and a retry is not possible, the address is fixed).
+- The runtime prints "Failed to free rdram" at exit after the swap. Expected, harmless.
+- `osVirtualToPhysical` on a low address (unchanged from 7o).
+
+**Next**
+- 7q: real `osMapTLB` and `osUnmapTLB` in `src/game/tlb.cpp`, the start-up swap in `on_init`, then run 11.
+
 ## 2026-10-13: Run 10, plan for the TLB mapping (Phase 2, task 7o)
 
 **Result: plan only, no code changed, nothing regenerated, nothing built.** Decisions are open (see the end).

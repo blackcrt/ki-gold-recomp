@@ -78,6 +78,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `lib/` | Git submodules: N64ModernRuntime, RecompFrontend, rt64, at fixed pins. Never edit or copy files from here. Fresh clone: `git submodule update --init --recursive --depth 1` |
 | `CMakeLists.txt` | Build file for the Windows port (adapted from WM2K) |
 | `tools/build.ps1` | Loads the x64 clang-cl environment and runs CMake. From Ubuntu: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1'` (add `-Build` to compile). Output in `build-msvc/`, never committed |
+| `tools/tlbtest/` | Stand-alone proof test for the TLB plan: rebuilds a 4 GB block on a shared memory section and maps 4 KB pages at low addresses. No game code. `build.ps1` in that folder builds and runs it, output in `build-tlbtest/`, never committed |
 | `src/main/main.cpp` | Program start: describes the game to the runtime, sets up window, sound, input, then starts it |
 | `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime. Also finds the generated function for a PC code address (for the crash reporter) |
 | `src/main/crash_reporter.cpp` | Prints `[kigold][CRASH]` lines on a fatal exception: code address, memory address as an N64 address, read or write, callers. Report only, the exit code stays the same |
