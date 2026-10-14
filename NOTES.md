@@ -2,6 +2,55 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Run 10, plan for the TLB mapping (Phase 2, task 7o)
+
+**Result: plan only, no code changed, nothing regenerated, nothing built.** Decisions are open (see the end).
+
+**Run 10** (BlackCRT's report, log in `build-msvc/firstrun.log`, which is UTF-16)
+- The 7n status fix is proven: one `[kigold][status]` line, no exit.
+- Maya vs Maya. Both fighter inflates come from ROM `0x00B2D770`, so the "same offset twice" of run 9 was real, not a tracking bug.
+- `osMapTLB`: entry 0 virtual `0x00000000` to physical `0x003A4000` (one page), entries 1 to 5 virtual `0x00090000` to `0x00099FFF` to physical `0x001DB000` to `0x001E4FFF`. Run 9 used `0x00080000`.
+- About 20 stage inflates, then a crash: WRITE to N64 `0x00000002` in `func_8001D4BC` (called from `func_8001D824` < `0x8000FAA0`).
+
+**1. How an address becomes a PC address (read from `lib/N64ModernRuntime/N64Recomp/include/recomp.h`)**
+- `MEM_W(offset, reg)` is `*(int32_t*)(rdram + ((reg + offset) - 0xFFFFFFFF80000000))`. `MEM_H` flips bit 1 of the address first (`^ 2`), `MEM_B` flips the low 2 bits (`^ 3`), because the runtime stores each 4-byte word byte-swapped. The runtime's own functions use `TO_PTR`, same formula.
+- Registers hold 32-bit values sign-extended to 64 bits. `0x80000000` gives offset 0. `0x00000002` gives offset `0x80000002`, `0x00090000` gives `0x80090000`: exactly 2 GB into the block.
+- The runtime (`recomp.cpp` line 844) takes one 4 GB block with plain `VirtualAlloc`, all no-access, then makes the first 512 MB read/write. So every 32-bit address has its own spot inside the block, and low addresses land at the 2 GB mark on no-access pages.
+- Checked against the crash: the write was at `0x193E8300002`, minus `0x80000002` gives the block start `0x19368300000`.
+
+**2. Where the game maps and uses the TLB (split and logs)**
+- Only two functions call `osMapTLB`/`osUnmapTLB`: `func_8001CF5C` (stream1) and `func_801C57B0_stream2`.
+- `func_8001CF5C`: unmaps entries 0 to 30, maps entry 0 (virtual 0 to physical `0x3A4000`, one page), then entries 1 to 5 for player 1's fighter and, only if player 2's fighter is different, entries 6 to 10 for player 2. Virtual base is (fighter ID + 1) x `0x10000` (IDs in `D_8004E98C[0]` and `[1]`), 10 pages each. Player 1 slot is physical `0x1DB000`, player 2 slot is `0x1E5000`. So Maya is ID 8, run 9's fighter was ID 7, and a mirror match maps only one block.
+- `func_801C57B0_stream2`: runs the full remap (through `func_8001CD90`), then points entry 0 at a buffer its caller passes in. 5 callers, all in stream2 (menus, attract or similar). None ran in runs 9 or 10.
+- Totals: at most 11 of 32 entries, always 4 KB pages, at most 21 pages (84 KB) mapped at once.
+- How often: `func_8001CF5C` is called from `func_8001CD90` (fight setup, 3 callers) and once directly (`0x80011C08`). Runs 9 and 10 each show exactly one remap, at fight load. Per round is unknown, no run got that far. Not per frame by static reading.
+- Data only (task 3b). No recompiled code lives at low addresses.
+- **Page 0 is a real mapping, not a null pointer.** `func_8001D4BC` copies 16 colours (`0x20` bytes) to virtual `0x00` to `0x1F`, using its loop counter as the pointer. Its sources include `0x803A3FC0` and `0x803A3FE0`, right below physical `0x3A4000`. So the palette is written through address 0 and must show up at `0x803A4000`.
+- The fighter block is filled through `0x801DB000` after it is mapped. So the same memory is used through both addresses, in both directions. A one-time copy is not enough.
+- No instruction uses `$zero` as a base in real code, so low accesses cannot be found by searching the split. They come through pointers.
+
+**3. Options**
+- (a) Share host memory. Back game RAM with a Windows section (`CreateFileMapping`) and map the same pages a second time at the low address's spot, on each `osMapTLB`; remove on `osUnmapTLB`. Covers everything (generated code, runtime functions, renderer), no cost per access, no regeneration. Remap cost is a few system calls, about 40 per fight load. Risks: (1) the runtime's block is plain `VirtualAlloc` memory, which Windows cannot share or partly replace, so at start we must release it and rebuild it at the same address as "placeholder" memory (`VirtualAlloc2`, `MapViewOfFile3`); there is a tiny window where another thread could take the address, which would be a loud start-up error, not a silent bug. (2) Our mappings are 4 KB aligned and the old Windows calls need 64 KB; from memory the placeholder calls lift that, unproven. (3) Needs Windows 10 version 1803 or newer. The installed SDK (10.0.26100.0) has both calls. At exit the runtime will print "Failed to free rdram", harmless.
+- (b) Translate in the accesses. Patching single instructions is not possible (pointers come from data). The workable form: N64Recomp's `recomp_include` option (exists, `config.cpp` line 427) lets generated code include our own header that redefines the `MEM_` macros to check for a low address and look it up in a table. Covers generated code only, not the runtime's own functions if the game hands them a low pointer. Cost: a compare on every memory access in the game (probably a few percent, unmeasured), full regeneration, bigger code. No operating system tricks, works the same on Linux.
+- (c1) Fork N64ModernRuntime and change the allocation there. Same as (a) without the start-up window. Needs the fork decision.
+- (c2) Copy instead of share: make the low pages writable (they are already committed) and copy at chosen moments. Cheap, but both-direction use is proven above, so stale data bugs would be silent. Not recommended.
+- Other recomps. Read today: Gauntlet Legends `src/tlb.cpp` does (a) from its own `src/`, in the runtime's `on_init` callback, Linux only (`memfd` + `mmap`, which can replace memory in place; Windows cannot). BM64TSARecomp `src/game/tlb.cpp` only records a table. From memory, not read: GoldenEye uses the TLB for code at `0x7F000000`, which is a different problem (code, not shared data).
+
+**4. Does `lib/` need to change? No.** The pinned runtime has `on_init_callback` (`game.hpp` line 39, called at `recomp.cpp` line 716 after boot memory is set up, before game code runs). Our `main.cpp` does not use it yet. All of (a) fits in `src/game/tlb.cpp` plus one line in `main.cpp`. One loose end: the runtime's `osVirtualToPhysical` returns a low address unchanged ("TODO handle TLB mappings"). Unknown whether the game ever passes one; watch for it.
+
+**5. Recommendation: (a), from `src/`, in two small tasks.**
+- 7p: a small stand-alone test program that proves the two unproven Windows points (4 KB placeholder mapping, release and rebuild at the same address). No game code.
+- 7q: real `osMapTLB`/`osUnmapTLB` in `src/game/tlb.cpp`, start-up swap in `on_init`, then run 11.
+- If 7p fails: (c1) if we fork anyway, else (b).
+
+**Open decisions for BlackCRT**
+- Go with (a) from `src/` (start-up swap), or fork the runtime now (c1)?
+- Windows 10 1803 or newer as the minimum: fine?
+- Proof test first (7p), or straight to the real thing?
+
+**Next (after the TLB)**
+- The DP clear (screens overlap, known).
+
 ## 2026-10-13: Runs 8 and 9, the status register exit, TLB facts (Phase 2, task 7n)
 
 **Result: the game boots to the title screen and menus, with sound (runs 8 and 9). The run 9 stop is explained and a small fix is built. The exe was not run after the fix**, so the fix is unproven until run 10 (ground rule 1). Regenerated once (new hook). Nothing in `lib/` was touched. The TLB was not touched.
