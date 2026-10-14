@@ -2,6 +2,36 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Run 7 confirms the DP wait, plan for osDpSetNextBuffer (Phase 2, task 7l)
+
+**Result: plan only. No code, no generated code, nothing in `lib/` changed. Not committed yet.** Everything below is static reading and is unproven until a run shows it (ground rule 1).
+
+**Run 7** (heartbeat on, log in `build-msvc/firstrun.log`)
+- Candidate 1 from 7k is confirmed. At 38 s: video ticks 2139, graphics tasks 0, audio tasks 2131, inflates 3. Thread 20 waits on `0x8000CF70` (0 of 5). Thread 3 waits on `0x8004A168` in `func_801ADB1C_stream2`. Thread 4 waits on `0x80066D08` (normal). Thread 73 idle on `0x802D3D48`, so the save worker is not the cause. Same picture from 4 s to 98 s. No MISSING, CRASH or WARNING lines.
+
+**What the block is**
+- Two buffers of `0x640` bytes (200 commands) at `0x80068820`, one per frame buffer, index in `0x80044904`. Frame buffers are two 640x480 16-bit buffers at `0x802D4000` (`0x96000` each).
+- The frame function gets a "builder" as its first argument. The builder fills the block every frame that is built. 5 of 9 call sites in stream2 pass `func_801AE568_stream2`. The other 4 pass `func_801ADEC0_stream2`, which calls through the pointer at `0x8004A920`. That pointer is set from about 20 places to one of 7 stream1 functions: `func_800198D0` (most common, 11 places), `func_80014330`, `func_800155E4`, `func_800160C8`, `func_80016874`, `func_80018EC0`, `func_8001377C`.
+- `func_801AE568_stream2` always writes: sync pipe, set color image (16-bit, screen width, address from table `0x8004A320`), set scissor 0,0 to 640,480. Then either a screen clear (fill mode, fill color from `0x80295668/6C/70`, fill rectangle over the screen), or, when flag `0x801CE504` is set, `func_801BCE58_stream2` adds a 64x48 256-color picture stretched over the screen (load palette, load block, one texture rectangle). It always ends with sync full. So this block is never empty.
+- `func_800198D0` also writes a low-level triangle command (opcode `0x0E`, shaded and textured, given as raw edge and texture slopes, tile 7), with a horizon check at line 147 (`0x8001A098`). Also set prim and env color, render modes, palette loads, fill rectangles. Not read in full.
+- Addresses in the block are plain `0x80......` addresses, not segment addresses. One command is written with opcode byte `0x2F` (set other modes with the top two bits clear) and one F3D command (`0xBA000E02`) sits in the raw block. Hardware only looks at the low 6 bits of the opcode.
+- Scheduler detail: after `osDpSetNextBuffer` it sets `0x8000D186` = 1 and waits for message 1 on `0x8000CF70` (`osSetEventMesg(9, 0x8000CF70, 1)` at `0x80001E60`). Only then does it start the task. The same message 1 arrives again when the task itself is done. A return value of -1 means "busy, try again".
+
+**Runtime and RT64 at our pins**
+- Runtime: `osDpSetNextBuffer_recomp` is empty (`librecomp/src/dp.cpp`). For a normal task `events.cpp` sends "SP done", calls the renderer's `send_dl`, then sends "DP done". `dp_complete` is not in a public header. `ultramodern::enqueue_external_message` is public.
+- RT64 has a raw DP path: `Application::processDisplayLists(memory, start, end, false)` calls `Interpreter::processRDPLists`. It masks opcodes to 6 bits and has every command the block uses, including low-level triangles (`rt64_gbi_rdp.cpp`, `tri`). Triangles are only mapped in this raw path, not in the display list path.
+- RecompFrontend only ever calls the display list path (`rt64_render_context.cpp` line 344) and keeps its RT64 object private (`renderer.h` line 37). So there is a path inside RT64 but no door to it from our code today.
+- Generated code calls only `osDpSetNextBuffer_recomp` from the DP family (4 mentions), so our own definition should link without pulling in the runtime's file. The build will tell.
+
+**Options (see chat summary for the full list)**
+- (a) Our own `osDpSetNextBuffer`: return 0, remember and log the block, send message 1 to `0x8000CF70`. Unblocks. The block's drawing is lost.
+- (b1) Draw the block through RT64's raw path from our renderer wrapper, right before the task it belongs to. Needs access to the private RT64 object.
+- (b2) Translate the block into a small display list and send it through `send_dl`. No access problem, but cannot carry the low-level triangle.
+
+**Next (proposal, waits for the coach)**
+- Task 7m: option (a) with a block logger and a heartbeat counter, then run 8.
+- After run 8: decide how to draw the block.
+
 ## 2026-10-13: Heartbeat added, static reading points at osDpSetNextBuffer (Phase 2, task 7k)
 
 **Result: the heartbeat is written and builds. The exe was not run**, so it is unproven until run 7 (ground rule 1). The static reading found a strong lead for the run 6 hang: the game's scheduler waits for a display processor interrupt that the runtime never sends. No game code, no generated code and nothing in `lib/` was touched. No regeneration was needed.
