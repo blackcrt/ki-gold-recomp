@@ -2,6 +2,54 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Runs 8 and 9, the status register exit, TLB facts (Phase 2, task 7n)
+
+**Result: the game boots to the title screen and menus, with sound (runs 8 and 9). The run 9 stop is explained and a small fix is built. The exe was not run after the fix**, so the fix is unproven until run 10 (ground rule 1). Regenerated once (new hook). Nothing in `lib/` was touched. The TLB was not touched.
+
+**Runs 8 and 9** (BlackCRT's report, log of run 9 in `build-msvc/firstrun.log`)
+- Run 8: title screen draws, audio plays and sounds right. Glitches from the skipped DP block (old frames smear, screens overlap, static top left). Exit 0, closes with X. So 7m's `osDpSetNextBuffer` stand-in is proven to unblock the scheduler.
+- Run 9: menus and character select work, the announcer says the fighter's name. Then stream3 loads (VERIFY OK), `osUnmapTLB` 0 to 30, `osMapTLB` 0 to 5, three data inflates, stream3 is entered, then "Unhandled status register bits changed: 0x20000000" and an access violation (null pointer read at exe + 0x2CD893).
+
+**Question 1: what prints the line, and is the crash a side effect? Yes, proven.**
+- Source: `cop0_status_write` in `librecomp/src/recomp.cpp` (line 421). It only knows the FR bit. For any other changed bit it prints the line, hits `assert(false)` (does nothing in a Release build) and calls `exit(EXIT_FAILURE)`.
+- Map file (`build-msvc/KIGoldRecompiled.map`, same build as run 9): `cop0_status_write` starts at exe + 0x1B54C0, and crash caller #13 is exe + 0x1B5524, so 0x64 bytes inside it. Callers #12 to #7 are Windows' exit code in `ucrtbase.dll`. #6 is the automatic cleanup of RmlUi's global `contexts` list, then `Rml::Context::~Context`, `UnloadAllDocuments`, `UnloadDocument`, and the null read is in `Rml::Element::DispatchEvent` + 0x13.
+- So: `exit()` on the game thread tears down the menu library while it is still in use, and that crashes. The crash is not a game bug. Rule of thumb for later: a crash whose callers go through `ucrtbase.dll` from a runtime function is an `exit()`, look at the line printed just before.
+
+**Question 2: which instruction, what value, safe to ignore? Yes.**
+- `stream3_entry` (`0x801AD900`): `ctc1` with `0x01000000` at `0x801AD9E0` (FPU control: round to nearest, flush tiny numbers to zero), then `mfc0 $v1, Status`, `lui $a0, 0x2000`, `or`, and `mtc0 $v1, Status` at `0x801AD9F0`.
+- The runtime starts the register at 0 on every game thread (`recomp_context ctx{}`), so the value written is `0x20000000`: only CU1, "FPU usable".
+- Safe on PC: recompiled floating point is plain C math and cannot be switched off. FR (the bit that changes how float registers pair up) is not touched.
+- Second status write in the game: `func_801AE460_stream3` at `0x801AE474` clears bit 0 ("interrupts on") and keeps the old bit in `$a2`. Bit 0 is never set by anything, so this write changes nothing and does not trip the exit. These two are the only status reads and writes in all generated code.
+
+**Question 3: options, without editing `lib/`**
+- (a) Hook before the instruction (`[[patches.hook]]`, `before_vram = 0x801AD9F0`) that copies the bit into the register first, so the runtime sees no change. Cost: one `kigold.toml` entry, about 10 lines of our C, one regeneration. The game's instruction stays, the register really holds the bit. **Chosen and done.**
+- (b) Replace the `mtc0` with a no-op (`[[patches.instruction]]`). Cost: one entry, one regeneration, no C. But the game's code is changed and the register never holds the bit.
+- (c) Our own `cop0_status_write`. Not possible cleanly: the runtime's copy sits in the same object file as its start code and its mod loader refers to it, so the linker would see two.
+- (d) Fork the runtime and accept CU1 there. Cleanest in the long run, fits the open "fork the 3 libraries" box, but much bigger than this task.
+
+**What was done**
+- New `src/game/status_reg.cpp`: `kigold_before_status_write` accepts a change of the CU1 bit only, and prints one `[kigold][status]` line the first time. Any other bit still reaches the runtime's exit on purpose.
+- `kigold.toml`: one hook on `stream3_entry` before `0x801AD9F0`. Regenerated with `tools/regen.py` (235 fall-throughs fixed, as before). Checked: the hook line sits right before the `mtc0` in the generated code. Build OK.
+
+**What the TLB log says (facts for planning, nothing changed)**
+- `osUnmapTLB` for entries 0 to 30 first. Then 6 `osMapTLB` calls, all with 4 KB pages (`pagemask` 0) and `asid` -1 (valid for every address space).
+- Entry 0: virtual `0x00000000` to `0x00000FFF` goes to physical `0x003A4000` (`0x803A4000`). Its second page is not mapped (`oddpaddr` -1).
+- Entries 1 to 5: virtual `0x00080000` to `0x00089FFF` (10 pages, `0xA000` bytes) goes to physical `0x001DB000` to `0x001E4FFF` (`0x801DB000` to `0x801E4FFF`), in order with no gaps. So one rule covers it: physical = virtual + `0x15B000`.
+- Right after the mapping the game inflates data to `0x801DB000`, exactly the start of that physical range, and to `0x801E5000`, exactly its end. So the mapped block is filled through its normal address and then, we expect, read through the low virtual one. Our log shows the same ROM offset (`0x00B2A790`) for both inflates. Not checked whether that is real or our ROM read tracking being out of date.
+- Third inflate goes to `0x802D4000`, which 7l found to be the first frame buffer. Not looked into.
+- Earlier static reading (PLAN.md risks table) expected virtual `0x00010000` to `0x000BA000`. Run 9 used only `0x80000` to `0x89FFF`. Other fighters or stages may use other ranges.
+- The `ra` value in our TLB log lines is always 0 and means nothing (N64Recomp does not fill it in).
+- Why it matters: the runtime only knows addresses from `0x80000000` up. A read of `0x00080000` lands outside game memory and crashes. Run 9 stopped before any such read, so which instructions use the low addresses is not known yet.
+
+**Likely next stops, to watch in run 10**
+- A crash on the first read of a mapped low address (the TLB task).
+- `func_801AE6B4_stream3`, the stubbed tail of `func_801AE460_stream3`, and the other stream3 stubs (jump tables, Count register).
+
+**Next**
+- Run 10 with `KIGOLD_HEARTBEAT=1`. Expect one `[kigold][status]` line and no "Unhandled status register" line.
+- Then plan the TLB mapping.
+- Still open from 7m: how to draw the DP block (run 8 shows the glitches it causes).
+
 ## 2026-10-13: Own osDpSetNextBuffer and a block logger (Phase 2, task 7m)
 
 **Result: written and builds. The exe was not run**, so it is unproven until run 8 (ground rule 1). No generated code and nothing in `lib/` was touched. No regeneration was needed.

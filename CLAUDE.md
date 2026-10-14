@@ -86,6 +86,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/game/missing_funcs.cpp` | Loud stand-ins for the 3 serial-port libultra names the runtime does not provide. Two only log; `__osSiRawStartDma` answers as "nothing plugged in" |
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3, and logs when the game enters each stream. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |
 | `src/game/dp_block.cpp` | Our own `osDpSetNextBuffer` (the runtime's does nothing). Draws nothing yet: counts the block of raw drawing commands, prints the first 3 as `[kigold][dp]` lines, and sends the game its "DP done" message (message 1 on queue `0x8000CF70`) |
+| `src/game/status_reg.cpp` | Accepts the "FPU usable" bit when stream3's first function writes the CPU status register (the runtime would call `exit()` there). Called from generated code through a `[[patches.hook]]` entry in `kigold.toml` |
 | `include/kigold_decls.h` | Declarations shared by our source files |
 | `menu/` | Our `recomp.rcss` and the 11 menu icons. The build copies it to `assets/` next to the exe. Not named `assets` because the guard blocks that name |
 | `recompcontrollerdb.txt` | Controller mappings for SDL, copied next to the exe |

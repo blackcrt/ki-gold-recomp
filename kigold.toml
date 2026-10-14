@@ -93,3 +93,11 @@ text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx
 [[patches.hook]]
 func = "stream3_entry"
 text = "{ extern void kigold_on_stream_entry(uint8_t* rdram, recomp_context* ctx, int stream); kigold_on_stream_entry(rdram, ctx, 3); }"
+
+# Just before stream3's first function writes the CPU's status register (its
+# mtc0 at 0x801AD9F0, value in $v1): let our code in src/game/status_reg.cpp
+# accept the "FPU usable" bit. Without it the runtime calls exit() there.
+[[patches.hook]]
+func = "stream3_entry"
+before_vram = 0x801AD9F0
+text = "{ extern void kigold_before_status_write(recomp_context* ctx, gpr value); kigold_before_status_write(ctx, ctx->r3); }"
