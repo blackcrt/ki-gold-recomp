@@ -2,6 +2,27 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Run 13, the fight frame loop runs with no crash (Phase 2, end of session 4)
+
+**Result: no crash. The fight's frame code runs every frame and kept running for the whole run (about 70 seconds). The screen stays blank and smeared.** No code changes in this entry. Written from the coach chat at the end of the session.
+
+**Run 13** (Maya vs Maya, `KIGOLD_VERIFY_INFLATE` and `KIGOLD_HEARTBEAT=1`; log in `build-msvc/firstrun.log`)
+- Same start as runs 11 and 12: streams 1 to 3 VERIFY OK, six TLB `MAPPED` lines, the `[kigold][status]` FPU line, the stage inflates (28 inflates in total).
+- **The 7u fixes are proven:** `[kigold][jump]` lines for both computed jumps (func_80032200 count 6, func_800323A4 count 7), 4 each, then quiet. No `Failed to find function`.
+- **The 7t frame tail is proven:** `stream3 frames` rises by 120 every 2 seconds (60 per second) from the 20 s beat to the last beat at 68 s (2947 frames). `abort jumps 0`, `wrong tail reruns 0` the whole run.
+- DP blocks and graphics tasks stay one for one at 60 per second. Audio tasks keep pace.
+- Threads: main (thread 3) waits on its frame queue `0x8004A168` from `0x8000FAA0` between frames, which is normal. Thread 73 ENDED (normal, see 7s). No CRASH, no MISSING, no FATAL, no WARNING lines.
+- On screen: blank fight screen, with the old screens still overlapping (the DP clear is skipped).
+
+**Why the screen shows nothing yet**
+- The 5 stream3 jump tables (object loop, second loop, the script readers) are still stubs, so no fighter or object logic runs (see 7t's stub table).
+- The DP block (black screen clear) is still not drawn, so old frames stay on screen.
+
+**Next (session 5)**
+- Plan the 5 stream3 jump tables plus the 86 table addresses in `PLAN.md` (plan first). This unlocks the fight logic.
+- Draw the DP block (the screen clear). Still open from 7m: b1, b2, or a RecompFrontend fork hook.
+- Smaller: the 2 Count routines (random numbers), option 2 for the frame tail abort path, the fork-side clean exit.
+
 ## 2026-10-13: Run 12, two computed jumps done in our code, one missing function start, clean exit (Phase 2, task 7u)
 
 **Result: the run 12 stop is fixed in our own code and checked by a stand-alone test (32 of 32 pass). One more missing function start was found before a run tripped over it. Regenerated once, builds and links. The exe was not run**, so nothing here is proven in the game until run 13 (ground rule 1).
