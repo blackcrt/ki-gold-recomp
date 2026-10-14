@@ -207,6 +207,7 @@ static RspExitReason unknown_ucode(uint8_t*, uint32_t) {
 
 static RspUcodeFunc* get_rsp_microcode(const OSTask* task) {
     if (task->t.type == M_AUDTASK) {
+        kigold::count_audio_task();
         return kigold_audio_ucode;
     }
     fprintf(stderr, "[kigold] UNKNOWN RSP task type=%u ucode=0x%08X (doing nothing)\n",
@@ -227,6 +228,8 @@ int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[kigold] main start\n");
     kigold::install_crash_reporter();
+    // Does nothing unless the environment variable KIGOLD_HEARTBEAT is set.
+    kigold::start_heartbeat();
 
 #ifdef _WIN32
     // The runtime times video frames with Sleep(). Windows only makes Sleep() precise
@@ -295,8 +298,8 @@ int main(int argc, char** argv) {
         .create_render_context = [](uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode)
             -> std::unique_ptr<ultramodern::renderer::RendererContext> {
             kigold::note_rdram(rdram);
-            return recompui::renderer::create_render_context(rdram, window_handle,
-                ultramodern::renderer::PresentationMode::Console, developer_mode);
+            return kigold::count_graphics_tasks(recompui::renderer::create_render_context(rdram, window_handle,
+                ultramodern::renderer::PresentationMode::Console, developer_mode));
         },
     };
     ultramodern::gfx_callbacks_t gfx_callbacks{
@@ -316,12 +319,20 @@ int main(int argc, char** argv) {
         .get_connected_device_info = get_connected_device_info,
     };
     ultramodern::events::callbacks_t events_callbacks{
-        .vi_callback = recompinput::update_rumble,
+        .vi_callback = []() {
+            kigold::count_video_tick();
+            recompinput::update_rumble();
+        },
         .gfx_init_callback = nullptr,
     };
     ultramodern::error_handling::callbacks_t error_callbacks{ .message_box = recompui::message_box };
     ultramodern::threads::callbacks_t threads_callbacks{
-        .get_game_thread_name = [](const OSThread*) -> std::string { return "game"; },
+        // The runtime calls this once for each thread the game creates, on that
+        // thread. The heartbeat uses it to learn which threads exist.
+        .get_game_thread_name = [](const OSThread* thread) -> std::string {
+            kigold::note_game_thread(thread);
+            return "game";
+        },
     };
 
     // Opens the launcher menu. "Load ROM" and "Start Game" there start the game.

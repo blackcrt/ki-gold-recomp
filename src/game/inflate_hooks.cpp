@@ -150,6 +150,7 @@ extern "C" void kigold_on_rom_read(uint8_t* rdram, recomp_context* ctx) {
 
 // Arguments of boot_inflate: a0 = compressed source, a1 = destination, a2 = work buffer.
 extern "C" void kigold_on_inflate_start(uint8_t* rdram, recomp_context* ctx) {
+    kigold::count_inflate();
     uint32_t src = (uint32_t)ctx->r4;
     uint32_t dst = (uint32_t)ctx->r5;
 

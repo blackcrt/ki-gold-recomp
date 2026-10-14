@@ -2,6 +2,50 @@
 
 Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
+## 2026-10-13: Heartbeat added, static reading points at osDpSetNextBuffer (Phase 2, task 7k)
+
+**Result: the heartbeat is written and builds. The exe was not run**, so it is unproven until run 7 (ground rule 1). The static reading found a strong lead for the run 6 hang: the game's scheduler waits for a display processor interrupt that the runtime never sends. No game code, no generated code and nothing in `lib/` was touched. No regeneration was needed.
+
+**Part 1: heartbeat** (new file `src/main/heartbeat.cpp`)
+- Off by default. Set the environment variable `KIGOLD_HEARTBEAT=1` before starting the exe. Every 2 seconds it prints one counter line and one line per game thread, all starting with `[kigold][beat]`.
+- Counter line: video ticks, graphics tasks, audio tasks, inflates, number of game threads.
+  - video ticks: counted in our video callback, only once the game runs. The runtime sends the game one video interrupt message on each. It is the runtime's count of frames, not proof the game picked the message up.
+  - graphics tasks: counted in a thin wrapper around the renderer (`send_dl`). The wrapper is only put in place while the heartbeat is on.
+  - audio tasks: counted in our microcode callback in `main.cpp`.
+  - inflates: counted in the existing inflate hook.
+- Thread line: id, priority, address of the thread record, state, and a short stack. Example of what a line should look like: `thread 20 (0x14) pri 13, record 0x8000CFC0: WAITING to receive on queue 0x8000CF70 (0 of 5 messages in it). Stack: osRecvMesg < 0x80001F20 boot`.
+- **The runtime does not expose thread state.** What I found in `lib/N64ModernRuntime/ultramodern/src` (read only):
+  - It keeps no list of game threads. But it calls our thread name callback once per created thread, on that thread, with the game's thread record. We already supplied that callback (it returned "game"). It now also remembers the record and a handle to the PC thread.
+  - It only ever writes STOPPED or QUEUED into the record's state field (`scheduling.cpp`, `threads.cpp`), never RUNNING or BLOCKED. So the state is worked out from the record's `queue` field instead: the ready list means READY, a list inside a message queue means WAITING (first word of the queue = waiting to receive, second word = waiting to send), no list means RUNNING, no PC thread means ENDED.
+  - It does not record who called `osRecvMesg`. The heartbeat stops the PC thread for a moment, walks its stack the same way the crash reporter does, and lets it go. Game functions print as N64 addresses, a few runtime functions (`osRecvMesg`, `osSendMesg`, `pause_self` and so on) by name.
+- Why this way: the two other ways were a hook on every calling function (needs a regeneration, and we do not know the callers in advance) or changing `lib/` (not allowed).
+- Limits, stated plainly: a line is a snapshot read without locks and can be a moment out of date. Stopping a thread to read its stack is a debugger technique with a small risk of its own, which is why it is off by default. The first boot thread has no record and is not listed. Stacks are Windows x64 only.
+- Small shared helpers moved out of the crash reporter so both can use them: `kigold::find_game_function`, `kigold::section_name`, `kigold::known_rdram`. Crash reports print the same as before.
+
+**Part 2: what the game most likely waits for (static reading of the split, nothing proven)**
+
+What comes after the data inflate, in order: the rest of `func_801AEE60_stream2` is about 100 calls of `func_8002FE7C` plus copies, with no library call that can wait. `func_801BCB30_stream2`, `func_800129A0`, `func_801BE1D0_stream2` and `func_801CCE90_stream2` cannot wait either. After that `stream2_entry` talks to a worker thread and enters its frame loop. The candidates, most likely first:
+
+1. **The scheduler waits for a display processor interrupt (strongest).**
+   - The game has its own scheduler: thread id 0x14 (20), priority 13, function `func_80001F20`, set up in `func_80001DF0`. It waits on queue `0x8000CF70` (5 slots) for three messages: 0 = video interrupt, 2 = RSP task done, 1 = display processor done.
+   - Each graphics task record has an optional block of raw display processor commands in front of the normal task (pointer at +0x00, size at +0x04, the normal task at +0x18). `func_80002420` sends that block straight to the display processor with `osDpSetNextBuffer` (`0x80002490` and `0x80002534`), sets a busy flag (`0x8000D186` = 1), and the normal task is only started when the "done" message arrives (`0x800021F8` to `0x8000221C`).
+   - The runtime's `osDpSetNextBuffer` at our pin is an empty function (`lib/N64ModernRuntime/librecomp/src/dp.cpp` line 33, `assert(false)`, and our Release build removes asserts). It draws nothing and sends no "done" message.
+   - stream2's frame function `func_801ADB1C_stream2` gets that block from `func_801AE568_stream2`, which writes a pointer for it at `0x801AE5A8`. So the first stream2 frame most likely already has one. Not confirmed that it is never zero.
+   - What that would look like: graphics tasks stay at 0, video ticks and audio tasks keep rising, the main thread stops building frames after 2 unanswered tasks (check at `0x801ADB94`). Blank window, no crash, almost no CPU. That is run 6.
+   - **This is bigger than the hang.** If right, KI Gold draws part of each frame with commands that go around the path RT64 listens to. Fixing the wait alone would not make that part visible. What the block contains was not read.
+2. **The main thread waits for its frame message.** `func_801ADB1C_stream2` at `0x801ADB4C`: blocking `osRecvMesg` on queue `0x8004A168`. Type 1 = a new video frame (the scheduler sends it to up to 3 registered queues at `0x800020C0`), type 2 = a graphics task is done. In candidate 1 the main thread sits here too, between frames.
+3. **The main thread is stuck sending to the worker.** `stream2_entry` sends 4 blocking messages (7, then 2 on a cold start, then 0, 0) at `0x801ACC98` to `0x801ACCE8` to queue `0x802D3D48`, which has 2 slots. The worker is thread id 0x49 (73), priority 2, function `func_801CCC8C_stream2`. Message 7 runs `func_801CDE94_stream2` (save chip probe, controller query, then a blocking wait for the "serial port done" message on queue `0x800683D0` at `0x801CDEE4`, also `0x801CCBC4`). Message 2 runs `func_801C0AE0_stream2` (reads the save, and can reach the Controller Pak code with our `__osSiRawStartDma` stand-in). Run 6 had no `MISSING` line, so the pak code had not run.
+4. **The controller wait.** `func_8002B5B0` at `0x8002B5C8`: blocking wait on `0x800683D0`, once per frame and from the worker. It needs one "done" message per `osContStartReadData`. The runtime sends one each time, so this only hangs if the two get out of step.
+
+Also checked: stream3 not loading is not by itself a sign of trouble. `stream2_entry` is a loop that only returns when its state variable (`0x80295678`) becomes 10 (`0x801AD890`). The reset event the worker registers (`0x801CCEEC`, event 14) is ignored by the runtime, harmless.
+
+**Commands**
+- Build: `Build OK`, no warnings from our files.
+
+**Next**
+- Run 7 with `KIGOLD_HEARTBEAT=1` (and `KIGOLD_VERIFY_INFLATE` as before). If candidate 1 is right: `graphics tasks 0` on every beat while video ticks and audio tasks rise, thread 20 waiting on `0x8000CF70`, the main thread waiting on `0x8004A168` with `0x801ADB1C stream2` on its stack.
+- If so, the decision for the coach: how to handle `osDpSetNextBuffer`. First step would be to read what the game puts in that block.
+
 ## 2026-10-12: Run 6, no crash, the game waits (Phase 2, end of session 3)
 
 **Result: the 7j audio cap works and the crash is gone. The game now hangs instead: the window stays open, blank and silent.** No code changes in this entry. Written from the coach chat at the end of the session.

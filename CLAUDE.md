@@ -81,6 +81,7 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `src/main/main.cpp` | Program start: describes the game to the runtime, sets up window, sound, input, then starts it |
 | `src/main/register_overlays.cpp` | Hands the generated code section table to the runtime. Also finds the generated function for a PC code address (for the crash reporter) |
 | `src/main/crash_reporter.cpp` | Prints `[kigold][CRASH]` lines on a fatal exception: code address, memory address as an N64 address, read or write, callers. Report only, the exit code stays the same |
+| `src/main/heartbeat.cpp` | Developer check for a run that hangs: set `KIGOLD_HEARTBEAT=1` and it prints `[kigold][beat]` lines every 2 seconds (each game thread's state, what it waits on, a short stack, and counters). Off by default |
 | `src/game/tlb.cpp` | `osMapTLB` and `osUnmapTLB` for the runtime. Log only for now |
 | `src/game/missing_funcs.cpp` | Loud stand-ins for the 3 serial-port libultra names the runtime does not provide. Two only log; `__osSiRawStartDma` answers as "nothing plugged in" |
 | `src/game/inflate_hooks.cpp` | Tells the runtime when the game has inflated code stream 1, 2 or 3, and logs when the game enters each stream. Called from generated code through the `[[patches.hook]]` entries in `kigold.toml`. Developer check: set `KIGOLD_VERIFY_INFLATE` to the path of `build/kigold.decompressed.z64` |

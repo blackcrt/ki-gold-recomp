@@ -30,6 +30,16 @@ void kigold::note_rdram(uint8_t* rdram) {
     game_rdram.store(rdram, std::memory_order_relaxed);
 }
 
+uint8_t* kigold::known_rdram() {
+    return game_rdram.load(std::memory_order_relaxed);
+}
+
+// Section numbers of the generated section table (RecompiledFuncs/recomp_overlays.inl).
+const char* kigold::section_name(uint32_t section) {
+    static const char* const names[] = { "boot", "stream1", "stream2", "stream3" };
+    return section < 4 ? names[section] : "?";
+}
+
 #if defined(_WIN32) && defined(_M_X64)
 #include <Windows.h>
 
@@ -57,12 +67,6 @@ namespace {
         }
     }
 
-    // Section numbers of the generated section table (RecompiledFuncs/recomp_overlays.inl).
-    const char* section_name(uint32_t section) {
-        static const char* const names[] = { "boot", "stream1", "stream2", "stream3" };
-        return section < 4 ? names[section] : "?";
-    }
-
     // find_generated_function only knows where each function starts, so it returns
     // the nearest start below the address, even when the address is in some other
     // code that happens to sit after it in the exe (run 4: the runtime's
@@ -87,9 +91,9 @@ namespace {
     // generated code.
     void print_code_address(const char* label, uintptr_t address, uintptr_t lookup_address) {
         kigold::GeneratedFunc func{};
-        if (kigold::find_generated_function(lookup_address, func) && really_inside(lookup_address, func)) {
+        if (kigold::find_game_function(lookup_address, func)) {
             fprintf(stderr, "[kigold][CRASH] %s 0x%016llX: game function at N64 0x%08X (%s), 0x%X bytes into its PC code%s\n",
-                label, (unsigned long long)address, func.vram, section_name(func.section), func.host_offset,
+                label, (unsigned long long)address, func.vram, kigold::section_name(func.section), func.host_offset,
                 func.shared ? " (several game functions share this PC code, the N64 address may be another one)" : "");
             return;
         }
@@ -250,6 +254,10 @@ namespace {
     }
 }
 
+bool kigold::find_game_function(uintptr_t host_address, GeneratedFunc& out) {
+    return find_generated_function(host_address, out) && really_inside(host_address, out);
+}
+
 void kigold::install_crash_reporter() {
     if (AddVectoredExceptionHandler(1, crash_handler) == nullptr) {
         fprintf(stderr, "[kigold] WARNING: could not install the crash reporter\n");
@@ -260,6 +268,10 @@ void kigold::install_crash_reporter() {
 }
 
 #else
+
+bool kigold::find_game_function(uintptr_t host_address, GeneratedFunc& out) {
+    return find_generated_function(host_address, out);
+}
 
 void kigold::install_crash_reporter() {
     // Windows x64 only for now. Other platforms get no crash report.
