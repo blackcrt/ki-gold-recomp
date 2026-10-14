@@ -75,7 +75,8 @@ Follow the six ground rules in `PLAN.md` (AI workflow section). The short versio
 | `tools/gen_symbols.py` | Writes `syms/dump.toml` from the split. Its `KEEP_GAME_CODE` list names proven libultra functions that N64Recomp must translate from the game's own code (written with `_game` added) |
 | `tools/regen.py` | Regenerates `RecompiledFuncs/` and `rsp/kigold_audio.cpp` in one command (unpack check, split, symbols, N64Recomp, cleanup, RSPRecomp, report) |
 | `tools/fix_fallthroughs.py` | Cleanup step: chains functions that fall through into the next one. Run by `regen.py` |
-| `lib/` | Git submodules: N64ModernRuntime, RecompFrontend, rt64, at fixed pins. Never edit or copy files from here. Fresh clone: `git submodule update --init --recursive --depth 1` |
+| `lib/` | Git submodules at fixed pins: N64ModernRuntime (our fork `blackcrt/N64ModernRuntime`, branch `kigold`), RecompFrontend and rt64 (upstream). Never edit or copy files from here. The one exception: a change to N64ModernRuntime may be made as a commit on the fork branch, and only if it is listed in `docs/RUNTIME_FORK.md`. Fresh clone: `git submodule update --init --recursive --depth 1` |
+| `docs/RUNTIME_FORK.md` | Every change we made to our N64ModernRuntime fork and why, plus the command that checks the list against the branch |
 | `CMakeLists.txt` | Build file for the Windows port (adapted from WM2K) |
 | `tools/build.ps1` | Loads the x64 clang-cl environment and runs CMake. From Ubuntu: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\src\ki-gold-recomp\tools\build.ps1'` (add `-Build` to compile). Output in `build-msvc/`, never committed |
 | `tools/tlbtest/` | Stand-alone proof test for the TLB plan: rebuilds a 4 GB block on a shared memory section and maps 4 KB pages at low addresses. No game code. `build.ps1` in that folder builds and runs it, output in `build-tlbtest/`, never committed |
