@@ -10,11 +10,11 @@ Not affiliated with or endorsed by Nintendo, Rare, or Microsoft.
 
 ## Status
 
-Early setup. See `PLAN.md` for the roadmap.
+**This project is incomplete and the game is not playable.** It is in Phase 2 (first boot): the game reaches the title screen and menus with sound, with heavy graphics glitches, and a fight starts but its screen stays blank. There is no release, and the modern features are not started. See `PLAN.md` for the roadmap and `NOTES.md` for the work log.
 
 ## Building
 
-Not buildable yet. Instructions will be added once the recompilation pipeline exists.
+There are no build instructions yet, because there is nothing playable to build. They will be added once the game runs.
 
 ## License
 
