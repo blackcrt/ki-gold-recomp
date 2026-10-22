@@ -6,9 +6,11 @@ Read this first every session. Then read `PLAN.md` for the full plan and the lat
 
 A solo, AI-assisted **static recompilation** of Killer Instinct Gold (N64, Rare, 1996), US V1.2, into a native Windows PC port, using N64Recomp, N64ModernRuntime, RT64, and RecompFrontend. The headline goal is **modern features**: high resolution, widescreen, high refresh rate, and quality-of-life fixes. Modeled on the WrestleMania 2000 recomp (`docs/WM2K.md`).
 
-- Owner: BlackCRT. sets goals, makes decisions, and playtests. Claude does the engineering.
+- Owner: BlackCRT. Sets goals, makes decisions, and playtests. Claude does the engineering.
 - The local model is deferred, so Claude Code does the bulk work for now; keep usage lean.
 - Current phase: see the status line at the top of `PLAN.md`.
+- Private notes about the owner live in `owner.local.md` (git-ignored, never committed): @owner.local.md
+- **Never write the owner's real name or personal details** (background, schedule, hardware, other projects, accounts) in any committed file or commit message. Refer to the owner as BlackCRT. Personal details go in `owner.local.md` only.
 
 ## Platform (hybrid)
 
@@ -28,7 +30,6 @@ BlackCRT runs a **coach chat** in claude.ai alongside you. The coach plans each 
 - Keep answers short and simple. Lead with what happened and what's next.
 - Never use em dashes in anything you write: chat, docs, code comments, commit messages.
 - Ask before anything that can't be undone (deleting files, rewriting git history, force pushes).
-
 
 ## Usage habits
 

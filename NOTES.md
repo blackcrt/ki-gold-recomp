@@ -6,6 +6,7 @@ Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 
 **Result: the audit passed on all 5 checks (game files, secrets, personal info, guard, README and license). The owner's first name is replaced with the GitHub handle in the current files, and the README now says the project is incomplete and not playable.**
 - Audit, read-only, over all 61 commits: no ROM, assets, generated code or binaries ever committed. No secrets. All commits use GitHub noreply emails. The guard passes on all files and CI ran it green on every push. GPL-3.0 fits N64ModernRuntime, RecompFrontend (GPL-3.0), RT64 and N64Recomp (MIT).
+- Personal details are also out of the current files. They moved to `owner.local.md`, which is git-ignored and read by `CLAUDE.md` through an import. `CLAUDE.md` now has a rule never to write personal details in committed files.
 - The first name is gone from the current files only. Older commits still contain it. Cleaning the history is an open decision.
 - Next: decide on the history, push, then switch the repo to public.
 

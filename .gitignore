@@ -64,3 +64,6 @@ Thumbs.db
 
 # ---- Claude Code local settings (keep project CLAUDE.md tracked) ----
 .claude/settings.local.json
+
+# ---- Private notes about the owner, read by CLAUDE.md, never committed ----
+*.local.md
