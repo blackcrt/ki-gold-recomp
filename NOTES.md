@@ -7,8 +7,8 @@ Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 **Result: the audit passed on all 5 checks (game files, secrets, personal info, guard, README and license). The owner's first name is replaced with the GitHub handle in the current files, and the README now says the project is incomplete and not playable.**
 - Audit, read-only, over all 61 commits: no ROM, assets, generated code or binaries ever committed. No secrets. All commits use GitHub noreply emails. The guard passes on all files and CI ran it green on every push. GPL-3.0 fits N64ModernRuntime, RecompFrontend (GPL-3.0), RT64 and N64Recomp (MIT).
 - Personal details are also out of the current files. They moved to `owner.local.md`, which is git-ignored and read by `CLAUDE.md` through an import. `CLAUDE.md` now has a rule never to write personal details in committed files.
-- The first name is gone from the current files only. Older commits still contain it. Cleaning the history is an open decision.
-- Next: decide on the history, push, then switch the repo to public.
+- History rewritten with `git filter-repo` (decision by BlackCRT): the same replacements applied to every old version of the docs, so no commit contains the name or personal details. All commit IDs changed; the three of our own quoted in this file are updated. A full backup of the old history is in `C:\src\ki-gold-recomp-backup-2026-10-21.bundle`, outside the repo.
+- Next: force push, delete the old GitHub Actions runs (they link to the old commits), then switch the repo to public.
 
 ## 2026-10-13: Run 13, the fight frame loop runs with no crash (Phase 2, end of session 4)
 
@@ -180,19 +180,19 @@ Not stream3: `func_80030EF0` (stream1, branches into another function) was not l
 
 **Decision (BlackCRT, after the 7q stop):** option 2, fork N64ModernRuntime now. This pulls one of the three forks on the before-going-public list forward. The swap in `on_init` and the thread pause are dropped.
 
-**A. Fork and repoint** (commit `8d9713b`)
+**A. Fork and repoint** (commit `bccfd76`)
 - `gh repo fork N64Recomp/N64ModernRuntime --clone=false` made the public `blackcrt/N64ModernRuntime`.
 - `.gitmodules` points there, with `branch = kigold`. In the submodule, `origin` is the fork and `upstream` is the original.
 - Branch `kigold` was pushed at exactly the old pin: `git ls-remote origin kigold` printed `4dc67eda958e5bf7d347e204eaa21798bc306a41`. Build: nothing to recompile, as expected.
 - Side effect, good: the pin was 109 commits off upstream `main` and on no upstream branch. It now sits on a branch we own.
 
-**B. The runtime change** (fork commit `45f0c58`, our commit `9bb0673`)
+**B. The runtime change** (fork commit `45f0c58`, our commit `df59851`)
 - One commit, two files (`librecomp/src/recomp.cpp`, `librecomp/include/librecomp/game.hpp`), 47 lines added, 10 removed, Windows branch only.
 - The block is reserved as one 4 GB placeholder (`VirtualAlloc2`), the first 512 MB are split off and replaced by a view of a 512 MB section (`MapViewOfFile3`). No swap, no copy, no gap. New `void* recomp::get_rdram_section()` returns the section handle. At exit the view is unmapped, so "Failed to free rdram" should not appear.
 - Side effects: Windows 10 version 1803 is now the minimum (older: the existing "Failed to allocate memory!" box). The old code committed all 4 GB, the new one commits 512 MB.
 - `docs/RUNTIME_FORK.md` lists the change, the reason, the check command and the rules. `CLAUDE.md`'s `lib/` row names the one exception to "never edit".
 
-**C. The test** (commit `9f1b9b4`, `tools/tlbtest`)
+**C. The test** (commit `0f693d4`, `tools/tlbtest`)
 - Part 1 now uses the fork's calls in the fork's order. The plain `VirtualAlloc`, the copy, the rebuild and the gap timer are gone.
 - Part 4 runs the 1000 remaps while a second thread reads a framebuffer-sized piece at `0x80700000` and the fighter block's physical pages the whole time, like the renderer does.
 - Result: 26 of 26 pass. The reader finished 3490 full reads during the remaps, never faulted, and saw the same data every time. One full remap still takes about 34 microseconds.
