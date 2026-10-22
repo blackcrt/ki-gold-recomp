@@ -8,7 +8,10 @@ Newest entries at the top. Each entry: what was done, what's stuck, what's next.
 - Audit, read-only, over all 61 commits: no ROM, assets, generated code or binaries ever committed. No secrets. All commits use GitHub noreply emails. The guard passes on all files and CI ran it green on every push. GPL-3.0 fits N64ModernRuntime, RecompFrontend (GPL-3.0), RT64 and N64Recomp (MIT).
 - Personal details are also out of the current files. They moved to `owner.local.md`, which is git-ignored and read by `CLAUDE.md` through an import. `CLAUDE.md` now has a rule never to write personal details in committed files.
 - History rewritten with `git filter-repo` (decision by BlackCRT): the same replacements applied to every old version of the docs, so no commit contains the name or personal details. All commit IDs changed; the three of our own quoted in this file are updated. A full backup of the old history is in `C:\src\ki-gold-recomp-backup-2026-10-21.bundle`, outside the repo.
-- Next: force push, delete the old GitHub Actions runs (they link to the old commits), then switch the repo to public.
+- Force pushed (`81db5e2...35ea1e0`). A fresh clone from GitHub scans clean. Deleted the 53 old Actions runs (they linked to the old commits); only the run for `35ea1e0` is left.
+- GitHub repo settings checked: no description, topics, issues, PRs, releases, tags, wiki or Pages, so nothing personal there.
+- GitHub still serves old commits by ID (checked with `81db5e2`). A Support request to purge them is drafted, to be sent by BlackCRT.
+- Next: send the Support request, then switch the repo to public.
 
 ## 2026-10-13: Run 13, the fight frame loop runs with no crash (Phase 2, end of session 4)
 
